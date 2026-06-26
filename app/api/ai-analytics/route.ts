@@ -22,10 +22,10 @@ export async function POST() {
     topClients: Object.entries(
       (ordersRes.data || []).reduce((acc: Record<string, number>, o) => {
         const name = o.client_name || o.customer_name;
-        if (name) acc[name] = (acc[name] || 0) + (o.quantity || 1);
+        if (name) acc[name] = (acc[name] || 0) + (Number(o.quantity) || 1);
         return acc;
       }, {})
-    ).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, qty]) => `${name}: ${qty} тортов`),
+    ).sort((a, b) => (b[1] as number) - (a[1] as number)).slice(0, 5).map(([name, qty]) => `${name}: ${qty} тортов`),
   };
 
   const prompt = `Ты аналитик кондитерского бизнеса BerryCake. Проанализируй данные и дай конкретные рекомендации.
