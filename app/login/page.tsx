@@ -7,7 +7,7 @@ export default function LoginPage() {
   const [pin, setPin] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const inputs = useRef([]);
+  const inputs = useRef<(HTMLInputElement | null)[]>([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -71,7 +71,7 @@ export default function LoginPage() {
           {pin.map((digit, i) => (
             <input
               key={i}
-              ref={(el) => (inputs.current[i] = el)}
+              ref={(el) => { inputs.current[i] = el; }}
               type="password"
               inputMode="numeric"
               maxLength={1}
