@@ -17,8 +17,8 @@ export async function POST() {
 
   const summary = {
     totalOrders: ordersRes.data?.length ?? 0,
-    topFlavors: flavorRes.data?.slice(0, 5).map((f) => `${f.cake_flavor}: ${f.order_count} заказов, ${f.total_cakes} тортов`),
-    dailyTrend: dailyRes.data?.slice(0, 7).map((d) => `${d.order_date}: ${d.orders} заказов, ${d.cakes} тортов`),
+    topFlavors: (flavorRes.data as any[])?.slice(0, 5).map((f) => `${f.cake_flavor}: ${f.order_count} заказов, ${f.total_cakes} тортов`),
+    dailyTrend: (dailyRes.data as any[])?.slice(0, 7).map((d) => `${d.order_date}: ${d.orders} заказов, ${d.cakes} тортов`),
     topClients: Object.entries(
       (ordersRes.data || []).reduce((acc: Record<string, number>, o) => {
         const name = o.client_name || o.customer_name;
