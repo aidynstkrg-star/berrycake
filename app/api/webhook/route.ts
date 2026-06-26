@@ -51,7 +51,8 @@ ${messageText}`,
       ],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const block = response.content[0];
+    const text = block.type === "text" ? (block as { type: "text"; text: string }).text : "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
   } catch {
