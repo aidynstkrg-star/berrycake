@@ -19,10 +19,10 @@ export default function Dashboard() {
   const [tab, setTab] = useState(0);
   const [todayStats, setTodayStats] = useState({ orders: 0, cakes: 0 });
   const [totalOrders, setTotalOrders] = useState(0);
-  const [dailyStats, setDailyStats] = useState([]);
-  const [flavorStats, setFlavorStats] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [filtered, setFiltered] = useState([]);
+  const [dailyStats, setDailyStats] = useState<any[]>([]);
+  const [flavorStats, setFlavorStats] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterDate, setFilterDate] = useState("");
@@ -33,7 +33,7 @@ export default function Dashboard() {
   const [aiLoading, setAiLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ client_name: "", phone: "", cake_flavor: "", quantity: "", order_date: "", order_time: "", address: "", notes: "" });
-  const [topClients, setTopClients] = useState([]);
+  const [topClients, setTopClients] = useState<any[]>([]);
 
   useEffect(() => {
     const auth = localStorage.getItem("bc_auth");
@@ -81,7 +81,7 @@ export default function Dashboard() {
       map[name].orders++;
       map[name].cakes += o.quantity || 1;
     });
-    setTopClients(Object.values(map).sort((a, b) => b.cakes - a.cakes).slice(0, 10));
+    setTopClients((Object.values(map) as { name: string; orders: number; cakes: number }[]).sort((a, b) => b.cakes - a.cakes).slice(0, 10));
   };
 
   useEffect(() => {
