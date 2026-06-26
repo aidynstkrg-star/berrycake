@@ -28,8 +28,8 @@ export default function Dashboard() {
       const [todayRes, dailyRes, flavorRes, ordersRes, totalRes] =
         await Promise.all([
           supabase.from("today_stats").select("*").single(),
-          supabase.from("daily_stats").select("*").order("day", { ascending: true }),
-          supabase.from("flavor_stats").select("*").order("count", { ascending: false }),
+          supabase.from("daily_stats").select("*").order("order_date", { ascending: true }),
+          supabase.from("flavor_stats").select("*").order("order_count", { ascending: false }),
           supabase
             .from("berrycake_orders")
             .select("*")
@@ -38,9 +38,9 @@ export default function Dashboard() {
           supabase.from("berrycake_orders").select("id", { count: "exact", head: true }),
         ]);
 
-      if (todayRes.data) setTodayStats(todayRes.data);
-      if (dailyRes.data) setDailyStats(dailyRes.data);
-      if (flavorRes.data) setFlavorStats(flavorRes.data);
+      if (todayRes.data) setTodayStats({ orders: todayRes.data.orders_today ?? 0, cakes: todayRes.data.cakes_today ?? 0 });
+      if (dailyRes.data) setDailyStats(dailyRes.data.map((r) => ({ ...r, day: r.order_date })));
+      if (flavorRes.data) setFlavorStats(flavorRes.data.map((r) => ({ flavor: r.cake_flavor, count: r.order_count })));
       if (ordersRes.data) setRecentOrders(ordersRes.data);
       if (totalRes.count !== null) setTotalOrders(totalRes.count);
     }
@@ -121,13 +121,13 @@ export default function Dashboard() {
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "#c8a96e", fontWeight: 600 }}>{order.customer_name || "—"}</span>
+                  <span style={{ color: "#c8a96e", fontWeight: 600 }}>{order.client_name || order.customer_name || "—"}</span>
                   <span style={{ color: "#888", fontSize: "11px" }}>
-                    {order.created_at ? new Date(order.created_at).toLocaleDateString("ru-RU") : ""}
+                    {order.order_date || (order.created_at ? new Date(order.created_at).toLocaleDateString("ru-RU") : "")}
                   </span>
                 </div>
                 <div style={{ color: "#aaa", marginTop: "2px" }}>
-                  {order.flavor || ""} {order.weight ? `· ${order.weight} кг` : ""} {order.price ? `· ${order.price} ₸` : ""}
+                  {order.cake_flavor || order.flavor || ""} {order.quantity ? `· ${order.quantity} шт` : ""} {order.address ? `· ${order.address}` : ""}
                 </div>
               </div>
             ))}
