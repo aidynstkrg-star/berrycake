@@ -44,8 +44,9 @@ function parseOrder(text: string) {
   let phone = phoneRaw ? phoneRaw.replace(/[^\d+]/g, "") : null;
   if (phone && phone.length < 7) phone = null;
 
-  const qtyMatch = text.match(/количество\s*[:\-]\s*(\d+)/i);
-  const qty = qtyMatch ? parseInt(qtyMatch[1]) : null;
+  // Take only the first number right after "Количество:", stop at space/letter
+  const qtyMatch = text.match(/количество\s*[:\-]\s*(\d{1,3})(?:\s|$|[^\d])/i);
+  const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : null;
 
   const notes: string[] = [];
   const op = getField(text, "тип оплата", "оплата");
