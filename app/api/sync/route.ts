@@ -66,15 +66,8 @@ function parseOrder(text: string) {
   };
 }
 
-export async function GET(req: Request) {
-  // Vercel cron sends this header for security
-  const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+async function runSync() {
   try {
-    // Fetch last 700 messages from Green API
     const res = await fetch(
       `https://api.green-api.com/waInstance${GREEN_INSTANCE}/getChatHistory/${GREEN_TOKEN}`,
       {
@@ -128,4 +121,18 @@ export async function GET(req: Request) {
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
+}
+
+// POST — вызов с дашборда (без авторизации, внутренний)
+export async function POST() {
+  return runSync();
+}
+
+// GET — Vercel Cron (требует CRON_SECRET)
+export async function GET(req: Request) {
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  return runSync();
 }

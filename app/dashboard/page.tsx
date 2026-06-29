@@ -34,12 +34,30 @@ export default function Dashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ client_name: "", phone: "", cake_flavor: "", quantity: "", order_date: "", order_time: "", address: "", notes: "" });
   const [topClients, setTopClients] = useState<any[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+
+  const syncNow = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/sync", { method: "POST" });
+      const data = await res.json();
+      const added = data.inserted ?? 0;
+      setLastSync(`Синхронизировано: +${added} новых`);
+      if (added > 0) fetchAll();
+    } catch {
+      setLastSync("Ошибка синхронизации");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     const auth = localStorage.getItem("bc_auth");
     if (!auth) { router.replace("/login"); return; }
     setUser(JSON.parse(auth));
     fetchAll();
+    syncNow();
 
     const channel = supabase.channel("orders_realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "berrycake_orders" }, (payload) => {
@@ -51,7 +69,9 @@ export default function Dashboard() {
       .subscribe();
 
     const interval = setInterval(fetchAll, 60000);
-    return () => { supabase.removeChannel(channel); clearInterval(interval); };
+    // Синхронизация с WhatsApp каждые 5 минут
+    const syncInterval = setInterval(syncNow, 5 * 60 * 1000);
+    return () => { supabase.removeChannel(channel); clearInterval(interval); clearInterval(syncInterval); };
   }, []);
 
   const fetchAll = async () => {
@@ -152,6 +172,11 @@ export default function Dashboard() {
           <span style={{ color: s.gold, fontWeight: 700, fontSize: 18 }}>BerryCake Analytics</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {lastSync && <span style={{ color: s.muted, fontSize: 12 }}>{lastSync}</span>}
+          <button onClick={syncNow} disabled={syncing}
+            style={{ background: syncing ? "#2a2825" : s.gold, border: "none", color: syncing ? s.muted : "#0f0e0c", padding: "6px 14px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: 13, fontWeight: 600 }}>
+            {syncing ? "Синхронизация..." : "Обновить"}
+          </button>
           <span style={{ color: s.muted, fontSize: 13 }}>{user.name}</span>
           <button onClick={() => { localStorage.removeItem("bc_auth"); router.replace("/login"); }}
             style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
