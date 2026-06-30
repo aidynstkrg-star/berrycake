@@ -11,7 +11,7 @@ const supabase = createClient(
 );
 
 const STATUSES = { new: { label: "Новый", color: "#c8a96e" }, in_progress: { label: "В работе", color: "#64b5f6" }, done: { label: "Готов", color: "#81c784" }, delivered: { label: "Доставлен", color: "#888" } };
-const TABS = ["Обзор", "Заказы", "Клиенты", "Аналитика ИИ"];
+const TABS = ["Обзор", "Заказы", "Клиенты", "Расходы", "Аналитика ИИ"];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -36,6 +36,30 @@ export default function Dashboard() {
   const [topClients, setTopClients] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [expenseSyncing, setExpenseSyncing] = useState(false);
+  const [expenseFilter, setExpenseFilter] = useState("all");
+  const [expenseMonth, setExpenseMonth] = useState("");
+
+  const fetchExpenses = async () => {
+    const { data } = await supabase
+      .from("berrycake_expenses")
+      .select("*")
+      .order("expense_date", { ascending: false })
+      .limit(300);
+    if (data) setExpenses(data);
+  };
+
+  const syncExpenses = async () => {
+    setExpenseSyncing(true);
+    try {
+      const res = await fetch("/api/sync-expenses", { method: "POST" });
+      const data = await res.json();
+      if (data.inserted > 0) fetchExpenses();
+    } finally {
+      setExpenseSyncing(false);
+    }
+  };
 
   const syncNow = async () => {
     setSyncing(true);
@@ -57,7 +81,9 @@ export default function Dashboard() {
     if (!auth) { router.replace("/login"); return; }
     setUser(JSON.parse(auth));
     fetchAll();
+    fetchExpenses();
     syncNow();
+    syncExpenses();
 
     const channel = supabase.channel("orders_realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "berrycake_orders" }, (payload) => {
@@ -386,8 +412,128 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* ── TAB 3: Аналитика ИИ ── */}
-        {tab === 3 && (
+        {/* ── TAB 3: Расходы ── */}
+        {tab === 3 && (() => {
+          const EXPENSE_CATS = ["all","аренда","ингредиенты","упаковка","зарплата","доставка","реклама","оборудование","обед","налоги","прочее"];
+          const filtered = expenses.filter((e) => {
+            if (expenseFilter !== "all" && e.category !== expenseFilter) return false;
+            if (expenseMonth && !e.expense_date?.startsWith(expenseMonth)) return false;
+            return true;
+          });
+          const total = filtered.reduce((s, e) => s + (e.amount || 0), 0);
+          const byCategory = EXPENSE_CATS.slice(1).map((cat) => ({
+            cat, sum: expenses.filter((e) => e.category === cat).reduce((s,e) => s + (e.amount||0), 0)
+          })).filter((c) => c.sum > 0).sort((a,b) => b.sum - a.sum);
+
+          return (
+            <div>
+              {/* Header row */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                <h2 style={{ color: s.gold, fontSize: 16, margin: 0 }}>Расходы</h2>
+                <button onClick={syncExpenses} disabled={expenseSyncing}
+                  style={{ background: expenseSyncing ? s.border : s.gold, border: "none", color: expenseSyncing ? s.muted : "#0f0e0c", padding: "7px 18px", borderRadius: 8, cursor: expenseSyncing ? "default" : "pointer", fontSize: 13, fontWeight: 600 }}>
+                  {expenseSyncing ? "Синхронизация..." : "Обновить расходы"}
+                </button>
+              </div>
+
+              {/* Summary cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <div style={{ color: s.muted, fontSize: 12 }}>Итого (фильтр)</div>
+                  <div style={{ color: s.gold, fontSize: 26, fontWeight: 700 }}>{total.toLocaleString("ru-RU")} ₸</div>
+                </div>
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <div style={{ color: s.muted, fontSize: 12 }}>Записей</div>
+                  <div style={{ color: s.text, fontSize: 26, fontWeight: 700 }}>{filtered.length}</div>
+                </div>
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <div style={{ color: s.muted, fontSize: 12 }}>С чеком/накладной</div>
+                  <div style={{ color: "#81c784", fontSize: 26, fontWeight: 700 }}>{filtered.filter((e) => e.has_receipt).length}</div>
+                </div>
+              </div>
+
+              {/* Category breakdown */}
+              {byCategory.length > 0 && (
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
+                  <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>По категориям</h3>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={byCategory} layout="vertical">
+                      <XAxis type="number" stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} tickFormatter={(v) => `${(v/1000).toFixed(0)}к`} />
+                      <YAxis type="category" dataKey="cat" stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} width={90} />
+                      <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} formatter={(v: any) => [`${v.toLocaleString("ru-RU")} ₸`, "Сумма"]} />
+                      <Bar dataKey="sum" fill="#e57373" radius={[0,4,4,0]} name="Сумма" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Filters */}
+              <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+                <select value={expenseFilter} onChange={(e) => setExpenseFilter(e.target.value)}
+                  style={{ backgroundColor: s.card, border: `1px solid ${s.border}`, color: s.text, padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
+                  {EXPENSE_CATS.map((c) => <option key={c} value={c}>{c === "all" ? "Все категории" : c}</option>)}
+                </select>
+                <input type="month" value={expenseMonth} onChange={(e) => setExpenseMonth(e.target.value)}
+                  style={{ backgroundColor: s.card, border: `1px solid ${s.border}`, color: s.text, padding: "7px 12px", borderRadius: 8, fontSize: 13 }} />
+                {(expenseFilter !== "all" || expenseMonth) && (
+                  <button onClick={() => { setExpenseFilter("all"); setExpenseMonth(""); }}
+                    style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
+                    Сбросить
+                  </button>
+                )}
+              </div>
+
+              {/* Table */}
+              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                      {["Дата","Категория","Описание","Сумма","Чек","Кто"].map((h) => (
+                        <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.length === 0 && (
+                      <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: s.muted }}>Нет данных. Создайте WhatsApp чат для расходов и настройте EXPENSES_CHAT_ID.</td></tr>
+                    )}
+                    {filtered.map((e) => (
+                      <tr key={e.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                        <td style={{ padding: "10px 14px", color: s.muted }}>{e.expense_date || "—"}</td>
+                        <td style={{ padding: "10px 14px" }}>
+                          <span style={{ background: "#2a2825", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>{e.category || "прочее"}</span>
+                        </td>
+                        <td style={{ padding: "10px 14px", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description || e.raw_message?.slice(0,80)}</td>
+                        <td style={{ padding: "10px 14px", color: "#e57373", fontWeight: 700 }}>{e.amount ? `${e.amount.toLocaleString("ru-RU")} ₸` : "—"}</td>
+                        <td style={{ padding: "10px 14px", textAlign: "center" }}>{e.has_receipt ? "✅" : "—"}</td>
+                        <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{e.confirmed_by || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* WhatsApp template */}
+              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginTop: 24, borderLeft: `3px solid ${s.gold}` }}>
+                <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Шаблон для WhatsApp чата расходов</h3>
+                <pre style={{ backgroundColor: s.bg, borderRadius: 8, padding: 16, fontSize: 12, color: s.text, lineHeight: 1.8, margin: 0, overflowX: "auto" }}>
+{`💸 РАСХОД
+Сумма: [число] тг
+Категория: [аренда / ингредиенты / упаковка / зарплата / доставка / реклама / оборудование / обед / налоги / прочее]
+Описание: [что именно]
+Дата: [ДД.ММ.ГГГГ]
+[📎 прикрепите фото чека или накладной]`}
+                </pre>
+                <p style={{ color: s.muted, fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+                  Отправляйте в чат расходов. Система автоматически распознает сумму, категорию и наличие чека.
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── TAB 4: Аналитика ИИ ── */}
+        {tab === 4 && (
           <div style={{ maxWidth: 720 }}>
             <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24 }}>
               <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 8 }}>ИИ-аналитик BerryCake</h2>
