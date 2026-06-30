@@ -30,19 +30,67 @@ function detectCategory(text: string): string {
   return "прочее";
 }
 
-function parseAmount(text: string): number | null {
-  // Matches: -300.000, 300 000, 300000, 300к, 300тг
-  const clean = text.replace(/\s/g, "");
-  const m = clean.match(/[-]?(\d[\d.,]*\d|\d+)(к|тг|тенге)?/i);
+function parseNumber(raw: string): number | null {
+  // "9 000", "9.000", "9000", "9к"
+  const s = raw.trim();
+  const m = s.match(/^([\d\s.,]+)(к)?$/i);
   if (!m) return null;
-  let num = parseFloat(m[1].replace(/,/g, ".").replace(/\./g, ""));
-  // Handle "300.000" → 300000 (Kazakh notation: dot as thousands separator)
-  const raw = m[1];
-  if (raw.includes(".") && raw.split(".")[1]?.length === 3) {
-    num = parseFloat(raw.replace(".", ""));
-  }
+  let clean = m[1].replace(/\s/g, "");
+  // "9.000" or "9,000" → 9000 (thousands separator)
+  if (clean.includes(".") && clean.split(".").pop()?.length === 3) clean = clean.replace(".", "");
+  if (clean.includes(",") && clean.split(",").pop()?.length === 3) clean = clean.replace(",", "");
+  clean = clean.replace(",", ".");
+  let num = parseFloat(clean);
   if (m[2]?.toLowerCase() === "к") num *= 1000;
-  return isNaN(num) ? null : Math.abs(num);
+  return isNaN(num) ? null : num;
+}
+
+// Parses multi-line nakładna:
+// "мука 25кг 9000\nкремчиз 1,5кг 2880\nИтого: 11880"
+// Returns total (from "Итого" line if present, else sum of detected numbers)
+function parseAmount(text: string): number | null {
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  // Look for explicit "Итого" / "Сумма:" line first
+  for (const line of lines) {
+    const m = line.match(/^(итого|сумма|total)\s*[:\-]?\s*([\d\s.,к]+)/i);
+    if (m) {
+      const v = parseNumber(m[2]);
+      if (v) return v;
+    }
+  }
+
+  // Single-line: find last standalone number in text
+  // "Сумма: 15000 тг" or "-300.000 аренда"
+  const singleM = text.match(/(?:сумма|расход)[:\s]+(-?[\d\s.,к]+)/i);
+  if (singleM) {
+    const v = parseNumber(singleM[1]);
+    if (v) return Math.abs(v);
+  }
+
+  // Multi-line nakładna without "Итого": sum all line amounts
+  // Each line: "мука 25кг 9000" → last number on the line
+  let lineSum = 0;
+  let lineCount = 0;
+  for (const line of lines) {
+    const skip = /^(дата|категория|описание|чат|от|итого|накладная|расход)/i.test(line);
+    if (skip) continue;
+    const nums = [...line.matchAll(/([\d][\d\s.,]*)(к|тг|тенге)?\s*$/gi)];
+    if (nums.length > 0) {
+      const last = nums[nums.length - 1];
+      const v = parseNumber(last[1] + (last[2] || ""));
+      if (v && v > 0) { lineSum += v; lineCount++; }
+    }
+  }
+  if (lineCount >= 2) return lineSum;
+
+  // Fallback: first big number in text
+  const allNums = [...text.matchAll(/\b(\d[\d\s.,]{2,})\b/g)];
+  for (const n of allNums) {
+    const v = parseNumber(n[1]);
+    if (v && v >= 100) return v;
+  }
+  return null;
 }
 
 function parseDate(text: string, fallback: string): string {
