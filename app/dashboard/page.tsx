@@ -40,6 +40,45 @@ export default function Dashboard() {
   const [expenseSyncing, setExpenseSyncing] = useState(false);
   const [expenseFilter, setExpenseFilter] = useState("all");
   const [expenseMonth, setExpenseMonth] = useState("");
+  const [clients, setClients] = useState<any[]>([]);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [editingClient, setEditingClient] = useState<any>(null);
+  const [clientForm, setClientForm] = useState({ name: "", phone: "", price_per_unit: "", client_type: "розница", notes: "" });
+
+  const fetchClients = async () => {
+    const { data } = await supabase.from("berrycake_clients").select("*").order("name");
+    if (data) setClients(data);
+  };
+
+  const saveClient = async () => {
+    const payload = {
+      name: clientForm.name,
+      phone: clientForm.phone || null,
+      price_per_unit: clientForm.price_per_unit ? parseFloat(clientForm.price_per_unit) : null,
+      client_type: clientForm.client_type,
+      notes: clientForm.notes || null,
+    };
+    if (editingClient) {
+      await supabase.from("berrycake_clients").update(payload).eq("id", editingClient.id);
+    } else {
+      await supabase.from("berrycake_clients").insert(payload);
+    }
+    setShowClientModal(false);
+    setEditingClient(null);
+    setClientForm({ name: "", phone: "", price_per_unit: "", client_type: "розница", notes: "" });
+    fetchClients();
+  };
+
+  const deleteClient = async (id: string) => {
+    await supabase.from("berrycake_clients").delete().eq("id", id);
+    fetchClients();
+  };
+
+  const openEditClient = (c: any) => {
+    setEditingClient(c);
+    setClientForm({ name: c.name, phone: c.phone || "", price_per_unit: c.price_per_unit?.toString() || "", client_type: c.client_type || "розница", notes: c.notes || "" });
+    setShowClientModal(true);
+  };
 
   const fetchExpenses = async () => {
     const { data } = await supabase
@@ -82,6 +121,7 @@ export default function Dashboard() {
     setUser(JSON.parse(auth));
     fetchAll();
     fetchExpenses();
+    fetchClients();
     syncNow();
     syncExpenses();
 
@@ -355,62 +395,120 @@ export default function Dashboard() {
         )}
 
         {/* ── TAB 2: Клиенты ── */}
-        {tab === 2 && (
+        {tab === 2 && (() => {
+          const totalDebt = clients.reduce((sum, c) => {
+            const orders = filtered.filter((o) => o.client_name === c.name || o.phone === c.phone);
+            const debt = orders.reduce((s, o) => s + ((o.total_amount || 0) - (o.paid_amount || 0)), 0);
+            return sum + debt;
+          }, 0);
+          return (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
-              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Топ клиентов по тортам</h2>
-                {topClients.map((c, i) => (
-                  <div key={c.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ color: s.muted, fontSize: 12, width: 20 }}>#{i + 1}</span>
-                      <span style={{ fontSize: 13 }}>{c.name}</span>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ color: s.gold, fontWeight: 700 }}>{c.cakes} <span style={{ color: s.muted, fontWeight: 400, fontSize: 11 }}>тортов</span></div>
-                      <div style={{ color: s.muted, fontSize: 11 }}>{c.orders} заказов</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Торты по клиентам (топ 8)</h2>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={topClients.slice(0,8)} layout="vertical">
-                    <XAxis type="number" stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} />
-                    <YAxis type="category" dataKey="name" stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} width={120} />
-                    <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} itemStyle={{ color: s.text }} />
-                    <Bar dataKey="cakes" fill={s.gold} radius={[0,4,4,0]} name="Тортов" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {/* Summary */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
+              {[
+                { label: "Клиентов", val: clients.length },
+                { label: "Консигнация", val: clients.filter((c) => c.client_type === "консигнация").length },
+                { label: "Общий долг", val: totalDebt > 0 ? `${totalDebt.toLocaleString()} ₸` : "0 ₸" },
+              ].map((st) => (
+                <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label}</div>
+                  <div style={{ color: s.gold, fontSize: 22, fontWeight: 700 }}>{st.val}</div>
+                </div>
+              ))}
             </div>
 
+            {/* Table */}
             <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-              <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Все клиенты</h2>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h2 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Клиенты и ставки</h2>
+                <button onClick={() => { setEditingClient(null); setClientForm({ name: "", phone: "", price_per_unit: "", client_type: "розница", notes: "" }); setShowClientModal(true); }}
+                  style={{ background: s.gold, border: "none", color: "#0f0e0c", padding: "7px 16px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                  + Добавить клиента
+                </button>
+              </div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${s.border}` }}>
-                    {["#","Клиент","Заказов","Тортов"].map((h) => (
+                    {["Клиент","Телефон","Тип","Ставка (₸/шт)","Долг","Заметки",""].map((h) => (
                       <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {topClients.map((c, i) => (
-                    <tr key={c.name} style={{ borderBottom: `1px solid ${s.border}` }}>
-                      <td style={{ padding: "10px 14px", color: s.muted }}>{i + 1}</td>
-                      <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 600 }}>{c.name}</td>
-                      <td style={{ padding: "10px 14px" }}>{c.orders}</td>
-                      <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 700 }}>{c.cakes}</td>
-                    </tr>
-                  ))}
+                  {clients.length === 0 && (
+                    <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: s.muted }}>Нет клиентов. Добавьте первого.</td></tr>
+                  )}
+                  {clients.map((c) => {
+                    const clientOrders = orders.filter((o) => o.client_name === c.name || (c.phone && o.phone === c.phone));
+                    const debt = clientOrders.reduce((s, o) => s + ((o.total_amount || 0) - (o.paid_amount || 0)), 0);
+                    return (
+                      <tr key={c.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                        <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 600 }}>{c.name}</td>
+                        <td style={{ padding: "10px 14px", color: s.muted }}>{c.phone || "—"}</td>
+                        <td style={{ padding: "10px 14px" }}>
+                          <span style={{ background: c.client_type === "консигнация" ? "#7c3aed22" : c.client_type === "опт" ? "#c8a96e22" : "#1a1815", color: c.client_type === "консигнация" ? "#a78bfa" : c.client_type === "опт" ? s.gold : s.muted, padding: "2px 8px", borderRadius: 6, fontSize: 11 }}>
+                            {c.client_type}
+                          </span>
+                        </td>
+                        <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 700 }}>
+                          {c.price_per_unit ? `${Number(c.price_per_unit).toLocaleString()} ₸` : "—"}
+                        </td>
+                        <td style={{ padding: "10px 14px", color: debt > 0 ? "#f87171" : s.muted, fontWeight: debt > 0 ? 700 : 400 }}>
+                          {debt > 0 ? `${debt.toLocaleString()} ₸` : "—"}
+                        </td>
+                        <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{c.notes || "—"}</td>
+                        <td style={{ padding: "10px 14px" }}>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button onClick={() => openEditClient(c)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "3px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✏️</button>
+                            <button onClick={() => { if (confirm("Удалить клиента?")) deleteClient(c.id); }} style={{ background: "none", border: `1px solid ${s.border}`, color: "#f87171", padding: "3px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+
+            {/* Client modal */}
+            {showClientModal && (
+              <div style={{ position: "fixed", inset: 0, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
+                <div style={{ background: s.card, borderRadius: 16, padding: 28, width: 420, border: `1px solid ${s.border}` }}>
+                  <h3 style={{ color: s.gold, marginBottom: 20 }}>{editingClient ? "Редактировать клиента" : "Добавить клиента"}</h3>
+                  {[
+                    { label: "Имя / название *", key: "name", type: "text" },
+                    { label: "Телефон", key: "phone", type: "text" },
+                    { label: "Ставка за 1 шт (₸)", key: "price_per_unit", type: "number" },
+                    { label: "Заметки", key: "notes", type: "text" },
+                  ].map(({ label, key, type }) => (
+                    <div key={key} style={{ marginBottom: 14 }}>
+                      <div style={{ color: s.muted, fontSize: 12, marginBottom: 4 }}>{label}</div>
+                      <input type={type} value={clientForm[key]} onChange={(e) => setClientForm((f) => ({ ...f, [key]: e.target.value }))}
+                        style={{ width: "100%", background: s.bg, border: `1px solid ${s.border}`, color: s.text, padding: "8px 12px", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+                    </div>
+                  ))}
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 4 }}>Тип клиента</div>
+                    <select value={clientForm.client_type} onChange={(e) => setClientForm((f) => ({ ...f, client_type: e.target.value }))}
+                      style={{ width: "100%", background: s.bg, border: `1px solid ${s.border}`, color: s.text, padding: "8px 12px", borderRadius: 8, fontSize: 13 }}>
+                      <option>розница</option>
+                      <option>опт</option>
+                      <option>консигнация</option>
+                    </select>
+                  </div>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button onClick={() => setShowClientModal(false)} style={{ flex: 1, background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "9px 0", borderRadius: 8, cursor: "pointer" }}>Отмена</button>
+                    <button onClick={saveClient} disabled={!clientForm.name}
+                      style={{ flex: 2, background: clientForm.name ? s.gold : s.border, color: clientForm.name ? "#0f0e0c" : s.muted, border: "none", padding: "9px 0", borderRadius: 8, cursor: clientForm.name ? "pointer" : "default", fontWeight: 700 }}>
+                      {editingClient ? "Сохранить" : "Добавить"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
-        )}
+          );
+        })()}
 
         {/* ── TAB 3: Расходы ── */}
         {tab === 3 && (() => {
