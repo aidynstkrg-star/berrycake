@@ -153,8 +153,6 @@ export default function Dashboard() {
     fetchExpenses();
     fetchClients();
     fetchUsers();
-    syncNow();
-    syncExpenses();
 
     const channel = supabase.channel("orders_realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "berrycake_orders" }, (payload) => {
@@ -166,9 +164,7 @@ export default function Dashboard() {
       .subscribe();
 
     const interval = setInterval(fetchAll, 60000);
-    // Синхронизация с WhatsApp каждые 5 минут
-    const syncInterval = setInterval(syncNow, 5 * 60 * 1000);
-    return () => { supabase.removeChannel(channel); clearInterval(interval); clearInterval(syncInterval); };
+    return () => { supabase.removeChannel(channel); clearInterval(interval); };
   }, []);
 
   const fetchAll = async () => {
@@ -946,7 +942,7 @@ export default function Dashboard() {
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
           <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: 400 }}>
             <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 20 }}>{editingUser ? "Редактировать" : "Новый пользователь"}</h2>
-            {[["name","Имя"], ["role","Должность"], ["pin","PIN-код (6 цифр)"]].map(([field, label]) => (
+            {[["name","Имя"], ["pin","PIN-код (4-6 цифр)"]].map(([field, label]) => (
               <div key={field} style={{ marginBottom: 14 }}>
                 <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>{label}</label>
                 <input
@@ -958,8 +954,19 @@ export default function Dashboard() {
                 />
               </div>
             ))}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Роль</label>
+              <select value={userForm.role} onChange={(e) => setUserForm((f) => ({ ...f, role: e.target.value }))}
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 13 }}>
+                <option value="">— выберите —</option>
+                <option value="Соучредитель">Соучредитель</option>
+                <option value="Операционный Директор">Операционный Директор</option>
+                <option value="Менеджер цеха">Менеджер цеха</option>
+                <option value="Менеджер">Менеджер</option>
+              </select>
+            </div>
             <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-              <button onClick={saveUser} disabled={!userForm.name || !userForm.pin || userForm.pin.length !== 6}
+              <button onClick={saveUser} disabled={!userForm.name || !userForm.pin || userForm.pin.length < 4 || !userForm.role}
                 style={{ flex: 1, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px", color: "#0f0e0c", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
                 Сохранить
               </button>

@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 export default function Root() {
   const router = useRouter();
   useEffect(() => {
-    if (localStorage.getItem("bc_auth")) {
-      router.replace("/dashboard");
+    const auth = localStorage.getItem("bc_auth");
+    if (auth) {
+      const { role } = JSON.parse(auth);
+      router.replace(role === "Менеджер цеха" ? "/cashier" : "/dashboard");
     } else {
       router.replace("/login");
     }
