@@ -10,7 +10,7 @@ const supabase = createClient(
 
 const s = { bg: "#0f0e0c", card: "#1a1815", gold: "#c8a96e", text: "#f5f0e8", muted: "#888", border: "#2a2825" };
 const SIZES = [{ label: "8 шт", value: 8 }, { label: "12 шт", value: 12 }, { label: "Другой", value: 0 }];
-const DEFAULT_FLAVORS = ["Молочная девочка","Фисташка","Шоколад","Красный бархат","Карамель","Ваниль","Клубника","Манго","Лимон","Орео"];
+const DEFAULT_FLAVORS = ["ВУПИ","МОЛОЧКА","ЯГОДНЫЙ","НУТЕЛЛА","СНИКЕРС","СГУЩЕНКА ОРЕХ"];
 
 export default function CashierPage() {
   const router = useRouter();
