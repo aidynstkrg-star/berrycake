@@ -9,7 +9,7 @@ const supabase = createClient(
 );
 
 const s = { bg: "#0f0e0c", card: "#1a1815", gold: "#c8a96e", text: "#f5f0e8", muted: "#888", border: "#2a2825" };
-const SIZES = [{ label: "8 шт", value: 8 }, { label: "12 шт", value: 12 }, { label: "Другой", value: 0 }];
+const SIZES = [{ label: "8 см", value: 8 }, { label: "12 см", value: 12 }, { label: "Другой", value: 0 }];
 const DEFAULT_FLAVORS = ["ВУПИ","МОЛОЧКА","ЯГОДНЫЙ","НУТЕЛЛА","СНИКЕРС","СГУЩЕНКА ОРЕХ"];
 
 export default function CashierPage() {
@@ -100,7 +100,7 @@ export default function CashierPage() {
         status: "new",
         total_amount: totalAmount,
         payment_type: isWalkIn ? "наличные" : (selectedClient?.client_type || null),
-        notes: finalSize ? `Размер: ${finalSize} шт` : null,
+        notes: finalSize ? `Размер: ${finalSize} см` : null,
       }).select().single();
       setSavedOrder(data);
       setDone(true);
@@ -341,7 +341,7 @@ export default function CashierPage() {
                         <div><span style={{ color:s.muted }}>Продукт:</span> <strong>{finalFlavor}</strong></div>
                         <div><span style={{ color:s.muted }}>Клиент:</span> <strong>{isWalkIn?(walkInName||"Физ. лицо"):selectedClient?.name}</strong></div>
                         <div><span style={{ color:s.muted }}>Количество:</span> <strong>{quantity} шт</strong></div>
-                        {size!==null && (size>0||customSize) && <div><span style={{ color:s.muted }}>Размер бенто:</span> <strong>{size===0?customSize:size} шт в боксе</strong></div>}
+                        {size!==null && (size>0||customSize) && <div><span style={{ color:s.muted }}>Размер бенто:</span> <strong>{size===0?customSize:size} см</strong></div>}
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:12 }}>
