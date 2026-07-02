@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-const USERS = [
-  { pin: "123456", name: "Руководитель", role: "admin" },
-];
+const supabase = createClient(
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_KEY || ""
+);
 
 export async function POST(req: NextRequest) {
   const { pin } = await req.json();
-  const user = USERS.find((u) => u.pin === String(pin));
-  if (!user) return NextResponse.json({ ok: false }, { status: 401 });
-  return NextResponse.json({ ok: true, name: user.name, role: user.role });
+  const { data, error } = await supabase
+    .from("berrycake_users")
+    .select("id, name, role")
+    .eq("pin", String(pin))
+    .single();
+  if (error || !data) return NextResponse.json({ ok: false }, { status: 401 });
+  return NextResponse.json({ ok: true, name: data.name, role: data.role });
 }

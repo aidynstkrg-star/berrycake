@@ -7,6 +7,7 @@ export default function LoginPage() {
   const [pin, setPin] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [welcome, setWelcome] = useState<string | null>(null);
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
   const router = useRouter();
 
@@ -46,16 +47,35 @@ export default function LoginPage() {
       if (res.ok) {
         const data = await res.json();
         localStorage.setItem("bc_auth", JSON.stringify({ name: data.name, role: data.role }));
-        router.replace("/dashboard");
+        setWelcome(data.name);
+        setTimeout(() => router.replace("/dashboard"), 1800);
       } else {
         setError("Неверный PIN-код");
         setPin(["", "", "", "", "", ""]);
-        inputs.current[0]?.focus();
+        setTimeout(() => inputs.current[0]?.focus(), 50);
       }
     } finally {
       setLoading(false);
     }
   };
+
+  if (welcome) {
+    return (
+      <div style={{
+        minHeight: "100vh", backgroundColor: "#0f0e0c", display: "flex",
+        alignItems: "center", justifyContent: "center", fontFamily: "sans-serif",
+      }}>
+        <div style={{ textAlign: "center", animation: "fadeIn 0.4s ease" }}>
+          <div style={{ fontSize: "64px", marginBottom: "16px" }}>👋</div>
+          <h2 style={{ color: "#c8a96e", fontSize: "28px", fontWeight: 700, marginBottom: "8px" }}>
+            Добро пожаловать,
+          </h2>
+          <h1 style={{ color: "#f5f0e8", fontSize: "36px", fontWeight: 800 }}>{welcome}!</h1>
+        </div>
+        <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{

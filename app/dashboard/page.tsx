@@ -11,7 +11,7 @@ const supabase = createClient(
 );
 
 const STATUSES = { new: { label: "Новый", color: "#c8a96e" }, in_progress: { label: "В работе", color: "#64b5f6" }, done: { label: "Готов", color: "#81c784" }, delivered: { label: "Доставлен", color: "#888" } };
-const TABS = ["Обзор", "Заказы", "Клиенты", "Расходы", "Аналитика ИИ"];
+const TABS = ["Обзор", "Заказы", "Клиенты", "Расходы", "Аналитика ИИ", "Настройки"];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -44,6 +44,10 @@ export default function Dashboard() {
   const [showClientModal, setShowClientModal] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
   const [clientForm, setClientForm] = useState({ name: "", phone: "", price_per_unit: "", client_type: "розница", notes: "" });
+  const [users, setUsers] = useState<any[]>([]);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [userForm, setUserForm] = useState({ name: "", role: "", pin: "" });
 
   const fetchClients = async () => {
     const { data } = await supabase.from("berrycake_clients").select("*").order("name");
@@ -78,6 +82,29 @@ export default function Dashboard() {
     setEditingClient(c);
     setClientForm({ name: c.name, phone: c.phone || "", price_per_unit: c.price_per_unit?.toString() || "", client_type: c.client_type || "розница", notes: c.notes || "" });
     setShowClientModal(true);
+  };
+
+  const fetchUsers = async () => {
+    const { data } = await supabase.from("berrycake_users").select("id,name,role,pin").order("id");
+    if (data) setUsers(data);
+  };
+
+  const saveUser = async () => {
+    const payload = { name: userForm.name, role: userForm.role, pin: userForm.pin };
+    if (editingUser) {
+      await supabase.from("berrycake_users").update(payload).eq("id", editingUser.id);
+    } else {
+      await supabase.from("berrycake_users").insert(payload);
+    }
+    setShowUserModal(false);
+    setEditingUser(null);
+    setUserForm({ name: "", role: "", pin: "" });
+    fetchUsers();
+  };
+
+  const deleteUser = async (id: number) => {
+    await supabase.from("berrycake_users").delete().eq("id", id);
+    fetchUsers();
   };
 
   const fetchExpenses = async () => {
@@ -122,6 +149,7 @@ export default function Dashboard() {
     fetchAll();
     fetchExpenses();
     fetchClients();
+    fetchUsers();
     syncNow();
     syncExpenses();
 
@@ -641,6 +669,68 @@ export default function Dashboard() {
           );
         })()}
 
+        {/* ── TAB 5: Настройки ── */}
+        {tab === 5 && (
+          <div style={{ maxWidth: 720 }}>
+            {/* Профиль */}
+            <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+              <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 20 }}>Профиль</h2>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{ width: 56, height: 56, borderRadius: "50%", backgroundColor: s.bg, border: `2px solid ${s.gold}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>
+                  {user?.name?.[0] || "?"}
+                </div>
+                <div>
+                  <div style={{ color: s.text, fontWeight: 700, fontSize: 18 }}>{user?.name}</div>
+                  <div style={{ color: s.muted, fontSize: 13, marginTop: 2 }}>{user?.role}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Пользователи */}
+            <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <h2 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Пользователи</h2>
+                <button onClick={() => { setEditingUser(null); setUserForm({ name: "", role: "", pin: "" }); setShowUserModal(true); }}
+                  style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "7px 16px", color: "#0f0e0c", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  + Добавить
+                </button>
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                    {["Имя", "Должность", "PIN", ""].map((h) => (
+                      <th key={h} style={{ padding: "8px 12px", color: s.muted, fontSize: 12, textAlign: "left", fontWeight: 600 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                      <td style={{ padding: "12px 12px", fontWeight: 600 }}>{u.name}</td>
+                      <td style={{ padding: "12px 12px", color: s.muted, fontSize: 13 }}>{u.role}</td>
+                      <td style={{ padding: "12px 12px", fontFamily: "monospace", color: s.muted, fontSize: 13, letterSpacing: 2 }}>
+                        {"•".repeat(u.pin?.length || 6)}
+                      </td>
+                      <td style={{ padding: "12px 12px", textAlign: "right" }}>
+                        <button onClick={() => { setEditingUser(u); setUserForm({ name: u.name, role: u.role, pin: u.pin }); setShowUserModal(true); }}
+                          style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12, marginRight: 8 }}>
+                          Ред.
+                        </button>
+                        {users.length > 1 && (
+                          <button onClick={() => deleteUser(u.id)}
+                            style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>
+                            Удалить
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* ── TAB 4: Аналитика ИИ ── */}
         {tab === 4 && (
           <div style={{ maxWidth: 720 }}>
@@ -662,6 +752,37 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* User Modal */}
+      {showUserModal && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+          <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: 400 }}>
+            <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 20 }}>{editingUser ? "Редактировать" : "Новый пользователь"}</h2>
+            {[["name","Имя"], ["role","Должность"], ["pin","PIN-код (6 цифр)"]].map(([field, label]) => (
+              <div key={field} style={{ marginBottom: 14 }}>
+                <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>{label}</label>
+                <input
+                  value={userForm[field]}
+                  onChange={(e) => setUserForm((f) => ({ ...f, [field]: e.target.value }))}
+                  maxLength={field === "pin" ? 6 : 50}
+                  inputMode={field === "pin" ? "numeric" : "text"}
+                  style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
+              <button onClick={saveUser} disabled={!userForm.name || !userForm.pin || userForm.pin.length !== 6}
+                style={{ flex: 1, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px", color: "#0f0e0c", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                Сохранить
+              </button>
+              <button onClick={() => setShowUserModal(false)}
+                style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "10px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Order Modal */}
       {showAddModal && (
