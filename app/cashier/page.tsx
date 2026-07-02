@@ -35,7 +35,6 @@ export default function CashierPage() {
   const [savedOrder, setSavedOrder] = useState<any>(null);
 
   // Data
-  const [flavors, setFlavors] = useState<string[]>(DEFAULT_FLAVORS);
   const [clients, setClients] = useState<any[]>([]);
   const [myOrders, setMyOrders] = useState<any[]>([]);
 
@@ -55,16 +54,11 @@ export default function CashierPage() {
 
   const loadData = async () => {
     const today = new Date().toISOString().slice(0, 10);
-    const [clientsRes, ordersRes, myOrdersRes] = await Promise.all([
+    const [clientsRes, myOrdersRes] = await Promise.all([
       supabase.from("berrycake_clients").select("id,name,phone,price_per_unit,client_type").order("name"),
-      supabase.from("berrycake_orders").select("cake_flavor").not("cake_flavor","is",null).limit(500),
       supabase.from("berrycake_orders").select("*").gte("created_at", today + "T00:00:00Z").order("created_at", { ascending: false }),
     ]);
     if (clientsRes.data) setClients(clientsRes.data);
-    if (ordersRes.data) {
-      const fromDB = [...new Set(ordersRes.data.map((o) => (o.cake_flavor||"").trim()).filter(Boolean))];
-      setFlavors([...new Set([...DEFAULT_FLAVORS, ...fromDB])]);
-    }
     if (myOrdersRes.data) setMyOrders(myOrdersRes.data);
   };
 
@@ -205,7 +199,7 @@ export default function CashierPage() {
                   <div>
                     <h2 style={{ color:s.gold, fontSize:18, marginBottom:20, textAlign:"center" }}>Выберите продукт</h2>
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:20 }}>
-                      {flavors.map((f)=>(
+                      {DEFAULT_FLAVORS.map((f)=>(
                         <button key={f} onClick={()=>{ setFlavor(f); setStep(1); }}
                           style={{ backgroundColor:s.card, border:`2px solid ${s.border}`, borderRadius:14, padding:"20px 12px",
                             cursor:"pointer", color:s.text, fontSize:13, fontWeight:600, textAlign:"center", lineHeight:1.3, minHeight:80,
