@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [totalOrders, setTotalOrders] = useState(0);
   const [dailyStats, setDailyStats] = useState<any[]>([]);
   const [flavorStats, setFlavorStats] = useState<any[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [orders, setOrders] = useState<any[]>([]);
   const [filtered, setFiltered] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -169,21 +170,44 @@ export default function Dashboard() {
   }, []);
 
   const fetchAll = async () => {
-    const [todayRes, dailyRes, flavorRes, ordersRes, totalRes] = await Promise.all([
-      supabase.from("today_stats").select("*").single(),
-      supabase.from("daily_stats").select("*").order("order_date", { ascending: true }),
-      supabase.from("flavor_stats").select("*").order("order_count", { ascending: false }),
-      supabase.from("berrycake_orders").select("*").order("created_at", { ascending: false }).limit(500),
-      supabase.from("berrycake_orders").select("id", { count: "exact", head: true }),
-    ]);
-    if (todayRes.data) setTodayStats({ orders: todayRes.data.orders_today ?? 0, cakes: todayRes.data.cakes_today ?? 0 });
-    if (dailyRes.data) setDailyStats(dailyRes.data.map((r) => ({ ...r, day: r.order_date?.slice(5) })));
-    if (flavorRes.data) setFlavorStats(flavorRes.data.map((r) => ({ flavor: r.cake_flavor, count: r.order_count })));
-    if (totalRes.count !== null) setTotalOrders(totalRes.count);
-    if (ordersRes.data) {
-      setOrders(ordersRes.data);
-      buildTopClients(ordersRes.data);
-    }
+    const { data: allOrders } = await supabase
+      .from("berrycake_orders")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(2000);
+
+    if (!allOrders) return;
+    setOrders(allOrders);
+    setTotalOrders(allOrders.length);
+    buildTopClients(allOrders);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const todayOrders = allOrders.filter((o) => (o.order_date || o.created_at?.slice(0, 10)) === today);
+    setTodayStats({
+      orders: todayOrders.length,
+      cakes: todayOrders.reduce((s, o) => s + (o.quantity || 1), 0),
+    });
+
+    // Daily stats from raw data (last 30 days)
+    const dailyMap: Record<string, { order_date: string; orders: number; cakes: number }> = {};
+    allOrders.forEach((o) => {
+      const d = o.order_date || o.created_at?.slice(0, 10);
+      if (!d) return;
+      if (!dailyMap[d]) dailyMap[d] = { order_date: d, orders: 0, cakes: 0 };
+      dailyMap[d].orders++;
+      dailyMap[d].cakes += o.quantity || 1;
+    });
+    const daily = Object.values(dailyMap).sort((a, b) => a.order_date.localeCompare(b.order_date));
+    setDailyStats(daily.map((r) => ({ ...r, day: r.order_date.slice(5) })));
+
+    // Flavor stats from raw data
+    const flavorMap: Record<string, number> = {};
+    allOrders.forEach((o) => {
+      const f = (o.cake_flavor || "").trim();
+      if (!f) return;
+      flavorMap[f] = (flavorMap[f] || 0) + (o.quantity || 1);
+    });
+    setFlavorStats(Object.entries(flavorMap).map(([flavor, count]) => ({ flavor, count })).sort((a, b) => b.count - a.count));
   };
 
   const buildTopClients = (data) => {
@@ -291,68 +315,137 @@ export default function Dashboard() {
 
       <div style={{ padding: 24 }}>
         {/* ── TAB 0: Обзор ── */}
-        {tab === 0 && (
-          <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 32 }}>
-              {[["Заказов сегодня", todayStats.orders], ["Тортов сегодня", todayStats.cakes], ["Всего заказов", totalOrders]].map(([label, val]) => (
-                <div key={label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, borderLeft: `3px solid ${s.gold}` }}>
-                  <div style={{ color: s.muted, fontSize: 13, marginBottom: 8 }}>{label}</div>
-                  <div style={{ color: s.gold, fontSize: 36, fontWeight: 700 }}>{val}</div>
+        {tab === 0 && (() => {
+          const prevMonth = () => {
+            const [y, m] = selectedMonth.split("-").map(Number);
+            const d = new Date(y, m - 2, 1);
+            setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          };
+          const nextMonth = () => {
+            const [y, m] = selectedMonth.split("-").map(Number);
+            const d = new Date(y, m, 1);
+            setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          };
+          const monthLabel = new Date(selectedMonth + "-01").toLocaleString("ru-RU", { month: "long", year: "numeric" });
+          const isCurrentMonth = selectedMonth === new Date().toISOString().slice(0, 7);
+
+          const mOrders = orders.filter((o) => {
+            const d = o.order_date || o.created_at?.slice(0, 10);
+            return d?.startsWith(selectedMonth);
+          });
+          const mCakes = mOrders.reduce((s, o) => s + (o.quantity || 1), 0);
+
+          const mDailyMap: Record<string, { day: string; orders: number; cakes: number }> = {};
+          mOrders.forEach((o) => {
+            const d = (o.order_date || o.created_at?.slice(0, 10)) || "";
+            const day = d.slice(5);
+            if (!mDailyMap[d]) mDailyMap[d] = { day, orders: 0, cakes: 0 };
+            mDailyMap[d].orders++;
+            mDailyMap[d].cakes += o.quantity || 1;
+          });
+          const mDaily = Object.values(mDailyMap).sort((a, b) => a.day.localeCompare(b.day));
+
+          const mFlavorMap: Record<string, number> = {};
+          mOrders.forEach((o) => {
+            const f = (o.cake_flavor || "").trim();
+            if (!f) return;
+            mFlavorMap[f] = (mFlavorMap[f] || 0) + (o.quantity || 1);
+          });
+          const mFlavors = Object.entries(mFlavorMap).map(([flavor, count]) => ({ flavor, count })).sort((a, b) => b.count - a.count);
+
+          return (
+            <>
+              {/* Month navigation */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 28 }}>
+                <button onClick={prevMonth}
+                  style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>
+                  ‹
+                </button>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ color: s.gold, fontWeight: 700, fontSize: 20, textTransform: "capitalize" }}>{monthLabel}</div>
+                  {isCurrentMonth && <div style={{ color: s.muted, fontSize: 11, marginTop: 2 }}>текущий месяц</div>}
                 </div>
-              ))}
-            </div>
+                <button onClick={nextMonth} disabled={isCurrentMonth}
+                  style={{ background: "none", border: `1px solid ${isCurrentMonth ? s.bg : s.border}`, color: isCurrentMonth ? s.bg : s.muted, borderRadius: 8, padding: "6px 16px", cursor: isCurrentMonth ? "default" : "pointer", fontSize: 20, lineHeight: 1 }}>
+                  ›
+                </button>
+              </div>
 
-            <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 32 }}>
-              <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Заказы по дням</h2>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={dailyStats}>
-                  <XAxis dataKey="day" stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} />
-                  <YAxis stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} />
-                  <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} labelStyle={{ color: s.gold }} itemStyle={{ color: s.text }} />
-                  <Bar dataKey="orders" fill={s.gold} radius={[4,4,0,0]} name="Заказы" />
-                  <Bar dataKey="cakes" fill="#64b5f6" radius={[4,4,0,0]} name="Торты" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Топ вкусов</h2>
-                {flavorStats.slice(0, 8).map((f) => (
-                  <div key={f.flavor} style={{ marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                      <span style={{ color: s.text }}>{f.flavor || "Не указан"}</span>
-                      <span style={{ color: s.gold }}>{f.count}</span>
-                    </div>
-                    <div style={{ backgroundColor: s.border, borderRadius: 4, height: 6 }}>
-                      <div style={{ backgroundColor: s.gold, height: 6, borderRadius: 4, width: `${(f.count / (flavorStats[0]?.count || 1)) * 100}%` }} />
-                    </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 32 }}>
+                {[
+                  ["Заказов за месяц", mOrders.length],
+                  ["Тортов за месяц", mCakes],
+                  ["Заказов сегодня", todayStats.orders],
+                  ["Тортов сегодня", todayStats.cakes],
+                ].map(([label, val]) => (
+                  <div key={label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, borderLeft: `3px solid ${s.gold}` }}>
+                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 8 }}>{label}</div>
+                    <div style={{ color: s.gold, fontSize: 32, fontWeight: 700 }}>{val}</div>
                   </div>
                 ))}
               </div>
 
-              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Последние заказы</h2>
-                <div style={{ overflowY: "auto", maxHeight: 280 }}>
-                  {orders.slice(0, 10).map((o) => (
-                    <div key={o.id} style={{ borderBottom: `1px solid ${s.border}`, paddingBottom: 10, marginBottom: 10, fontSize: 13 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: s.gold, fontWeight: 600 }}>{o.client_name || o.customer_name || "—"}</span>
-                        <span style={{ fontSize: 11, color: s.muted }}>{o.order_date || o.created_at?.slice(0,10)}</span>
-                      </div>
-                      <div style={{ color: "#aaa", marginTop: 2 }}>
-                        {o.cake_flavor || o.flavor || ""}{o.quantity ? ` · ${o.quantity} шт` : ""}
-                        <span style={{ marginLeft: 8, padding: "1px 8px", borderRadius: 10, fontSize: 11, backgroundColor: `${(STATUSES[o.status || "new"] || STATUSES.new).color}22`, color: (STATUSES[o.status || "new"] || STATUSES.new).color }}>
-                          {(STATUSES[o.status || "new"] || STATUSES.new).label}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 32 }}>
+                <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Заказы по дням — {monthLabel}</h2>
+                {mDaily.length === 0
+                  ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "40px 0" }}>Нет заказов в этом месяце</div>
+                  : <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={mDaily}>
+                        <XAxis dataKey="day" stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} />
+                        <YAxis stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} />
+                        <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} labelStyle={{ color: s.gold }} itemStyle={{ color: s.text }} />
+                        <Bar dataKey="orders" fill={s.gold} radius={[4,4,0,0]} name="Заказы" />
+                        <Bar dataKey="cakes" fill="#64b5f6" radius={[4,4,0,0]} name="Торты" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                }
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Топ вкусов — {monthLabel}</h2>
+                  {mFlavors.length === 0
+                    ? <div style={{ color: s.muted, fontSize: 13 }}>Нет данных</div>
+                    : mFlavors.slice(0, 8).map((f) => (
+                        <div key={f.flavor} style={{ marginBottom: 10 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                            <span style={{ color: s.text }}>{f.flavor}</span>
+                            <span style={{ color: s.gold }}>{f.count} шт</span>
+                          </div>
+                          <div style={{ backgroundColor: s.border, borderRadius: 4, height: 6 }}>
+                            <div style={{ backgroundColor: s.gold, height: 6, borderRadius: 4, width: `${(f.count / (mFlavors[0]?.count || 1)) * 100}%` }} />
+                          </div>
+                        </div>
+                      ))
+                  }
+                </div>
+
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Заказы месяца</h2>
+                  <div style={{ overflowY: "auto", maxHeight: 280 }}>
+                    {mOrders.length === 0
+                      ? <div style={{ color: s.muted, fontSize: 13 }}>Нет заказов</div>
+                      : mOrders.slice(0, 15).map((o) => (
+                          <div key={o.id} style={{ borderBottom: `1px solid ${s.border}`, paddingBottom: 10, marginBottom: 10, fontSize: 13 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span style={{ color: s.gold, fontWeight: 600 }}>{o.client_name || o.customer_name || "—"}</span>
+                              <span style={{ fontSize: 11, color: s.muted }}>{o.order_date || o.created_at?.slice(0,10)}</span>
+                            </div>
+                            <div style={{ color: "#aaa", marginTop: 2 }}>
+                              {o.cake_flavor || ""}{o.quantity ? ` · ${o.quantity} шт` : ""}
+                              <span style={{ marginLeft: 8, padding: "1px 8px", borderRadius: 10, fontSize: 11, backgroundColor: `${(STATUSES[o.status || "new"] || STATUSES.new).color}22`, color: (STATUSES[o.status || "new"] || STATUSES.new).color }}>
+                                {(STATUSES[o.status || "new"] || STATUSES.new).label}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                    }
+                  </div>
                 </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          );
+        })()}
 
         {/* ── TAB 1: Заказы ── */}
         {tab === 1 && (
