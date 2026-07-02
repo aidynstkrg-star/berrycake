@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, PieChart, Pie, Cell } from "recharts";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -43,7 +43,10 @@ export default function Dashboard() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [expenseSyncing, setExpenseSyncing] = useState(false);
   const [expenseFilter, setExpenseFilter] = useState("all");
-  const [expenseMonth, setExpenseMonth] = useState("");
+  const [expenseMonth, setExpenseMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [expForm, setExpForm] = useState({ description: "", category: "ингредиенты", unit: "", quantity_amount: "", payment_type: "нал", amount: "", expense_date: new Date().toISOString().slice(0,10) });
+  const [expDescSuggestions, setExpDescSuggestions] = useState<string[]>([]);
+  const [expSaving, setExpSaving] = useState(false);
   const [clients, setClients] = useState<any[]>([]);
   const [showClientModal, setShowClientModal] = useState(false);
   const [editingClient, setEditingClient] = useState<any>(null);
@@ -120,6 +123,48 @@ export default function Dashboard() {
       .order("expense_date", { ascending: false })
       .limit(300);
     if (data) setExpenses(data);
+  };
+
+  const addExpense = async () => {
+    if (!expForm.description || !expForm.amount) return;
+    setExpSaving(true);
+    try {
+      const payload: any = {
+        description: expForm.description,
+        category: expForm.category,
+        amount: parseFloat(expForm.amount),
+        expense_date: expForm.expense_date,
+        payment_type: expForm.payment_type,
+        confirmed_by: user?.name || null,
+      };
+      if (expForm.unit) payload.unit = expForm.unit;
+      if (expForm.quantity_amount) payload.quantity_amount = parseFloat(expForm.quantity_amount);
+      await supabase.from("berrycake_expenses").insert(payload);
+      setExpForm({ description: "", category: "ингредиенты", unit: "", quantity_amount: "", payment_type: "нал", amount: "", expense_date: new Date().toISOString().slice(0,10) });
+      fetchExpenses();
+    } finally {
+      setExpSaving(false);
+    }
+  };
+
+  const deleteExpense = async (id: string) => {
+    if (!confirm("Удалить запись?")) return;
+    await supabase.from("berrycake_expenses").delete().eq("id", id);
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  const getExpDescSuggestions = (val: string) => {
+    if (!val.trim()) { setExpDescSuggestions([]); return; }
+    const q = val.toLowerCase();
+    const seen = new Set<string>();
+    const suggestions: string[] = [];
+    expenses.forEach((e) => {
+      if (e.description && e.description.toLowerCase().includes(q) && !seen.has(e.description)) {
+        seen.add(e.description);
+        suggestions.push(e.description);
+      }
+    });
+    setExpDescSuggestions(suggestions.slice(0, 6));
   };
 
   const syncExpenses = async () => {
@@ -704,130 +749,259 @@ export default function Dashboard() {
 
         {/* ── TAB 3: Расходы ── */}
         {tab === 3 && (() => {
-          const EXPENSE_CATS = ["all","аренда","ингредиенты","упаковка","зарплата","доставка","реклама","оборудование","обед","налоги","прочее"];
-          const filtered = expenses.filter((e) => {
-            if (expenseFilter !== "all" && e.category !== expenseFilter) return false;
-            if (expenseMonth && !e.expense_date?.startsWith(expenseMonth)) return false;
-            return true;
+          const EXPENSE_CATS = ["ингредиенты","упаковка","зарплата","аренда","доставка","реклама","оборудование","обед","налоги","прочее"];
+          const UNITS = ["кг","г","л","шт","уп"];
+          const PAY_TYPES = ["нал","каспи","со счёта ИП"];
+          const PIE_COLORS = ["#c8a96e","#64b5f6","#81c784","#e57373","#f06292","#ffb74d","#a78bfa","#4dd0e1","#aed581","#ff8a65"];
+
+          const prevExpMonth = () => {
+            const [y, m] = expenseMonth.split("-").map(Number);
+            const d = new Date(y, m - 2, 1);
+            setExpenseMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          };
+          const nextExpMonth = () => {
+            const [y, m] = expenseMonth.split("-").map(Number);
+            const d = new Date(y, m, 1);
+            setExpenseMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          };
+          const isCurrentExpMonth = expenseMonth === new Date().toISOString().slice(0, 7);
+          const expMonthLabel = new Date(expenseMonth + "-01").toLocaleString("ru-RU", { month: "long", year: "numeric" });
+
+          const monthExpenses = expenses.filter((e) => e.expense_date?.startsWith(expenseMonth));
+          const filteredExpenses = monthExpenses.filter((e) => expenseFilter === "all" || e.category === expenseFilter);
+          const monthTotal = monthExpenses.reduce((s, e) => s + (e.amount || 0), 0);
+
+          const byCategory = EXPENSE_CATS.map((cat) => ({
+            name: cat, value: monthExpenses.filter((e) => e.category === cat).reduce((s, e) => s + (e.amount || 0), 0)
+          })).filter((c) => c.value > 0).sort((a, b) => b.value - a.value);
+
+          const byDay: Record<string, number> = {};
+          monthExpenses.forEach((e) => {
+            const d = e.expense_date || "";
+            byDay[d] = (byDay[d] || 0) + (e.amount || 0);
           });
-          const total = filtered.reduce((s, e) => s + (e.amount || 0), 0);
-          const byCategory = EXPENSE_CATS.slice(1).map((cat) => ({
-            cat, sum: expenses.filter((e) => e.category === cat).reduce((s,e) => s + (e.amount||0), 0)
-          })).filter((c) => c.sum > 0).sort((a,b) => b.sum - a.sum);
+          const dailyData = Object.entries(byDay).sort(([a],[b]) => a.localeCompare(b)).map(([date, sum]) => ({ day: date.slice(8), sum }));
+
+          const avgDay = dailyData.length > 0 ? Math.round(monthTotal / dailyData.length) : 0;
+
+          const canAddExpense = ["Дархан","Айдын","Алиби"].includes(user?.name);
 
           return (
             <div>
-              {/* Header row */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-                <h2 style={{ color: s.gold, fontSize: 16, margin: 0 }}>Расходы</h2>
-                <button onClick={syncExpenses} disabled={expenseSyncing}
-                  style={{ background: expenseSyncing ? s.border : s.gold, border: "none", color: expenseSyncing ? s.muted : "#0f0e0c", padding: "7px 18px", borderRadius: 8, cursor: expenseSyncing ? "default" : "pointer", fontSize: 13, fontWeight: 600 }}>
-                  {expenseSyncing ? "Синхронизация..." : "Обновить расходы"}
-                </button>
+              {/* Month navigation */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 24 }}>
+                <button onClick={prevExpMonth} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>‹</button>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ color: s.gold, fontWeight: 700, fontSize: 20, textTransform: "capitalize" }}>{expMonthLabel}</div>
+                  {isCurrentExpMonth && <div style={{ color: s.muted, fontSize: 11, marginTop: 2 }}>текущий месяц</div>}
+                </div>
+                <button onClick={nextExpMonth} disabled={isCurrentExpMonth}
+                  style={{ background: "none", border: `1px solid ${isCurrentExpMonth ? s.bg : s.border}`, color: isCurrentExpMonth ? s.bg : s.muted, borderRadius: 8, padding: "6px 16px", cursor: isCurrentExpMonth ? "default" : "pointer", fontSize: 20, lineHeight: 1 }}>›</button>
               </div>
 
-              {/* Summary cards */}
+              {/* Stat cards */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                  <div style={{ color: s.muted, fontSize: 12 }}>Итого (фильтр)</div>
-                  <div style={{ color: s.gold, fontSize: 26, fontWeight: 700 }}>{total.toLocaleString("ru-RU")} ₸</div>
-                </div>
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                  <div style={{ color: s.muted, fontSize: 12 }}>Записей</div>
-                  <div style={{ color: s.text, fontSize: 26, fontWeight: 700 }}>{filtered.length}</div>
-                </div>
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                  <div style={{ color: s.muted, fontSize: 12 }}>С чеком/накладной</div>
-                  <div style={{ color: "#81c784", fontSize: 26, fontWeight: 700 }}>{filtered.filter((e) => e.has_receipt).length}</div>
-                </div>
+                {[
+                  { label: "Итого за месяц", val: `${monthTotal.toLocaleString("ru-RU")} ₸`, color: "#e57373" },
+                  { label: "Записей", val: monthExpenses.length, color: s.text },
+                  { label: "Среднедневной", val: avgDay > 0 ? `${avgDay.toLocaleString("ru-RU")} ₸` : "—", color: s.gold },
+                ].map((st) => (
+                  <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, borderLeft: `3px solid ${st.color}` }}>
+                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label}</div>
+                    <div style={{ color: st.color, fontSize: 24, fontWeight: 700 }}>{st.val}</div>
+                  </div>
+                ))}
               </div>
 
-              {/* Category breakdown */}
-              {byCategory.length > 0 && (
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
-                  <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>По категориям</h3>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={byCategory} layout="vertical">
-                      <XAxis type="number" stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} tickFormatter={(v) => `${(v/1000).toFixed(0)}к`} />
-                      <YAxis type="category" dataKey="cat" stroke={s.muted} tick={{ fill: s.muted, fontSize: 11 }} width={90} />
-                      <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} formatter={(v: any) => [`${v.toLocaleString("ru-RU")} ₸`, "Сумма"]} />
-                      <Bar dataKey="sum" fill="#e57373" radius={[0,4,4,0]} name="Сумма" />
-                    </BarChart>
-                  </ResponsiveContainer>
+              {/* Charts row */}
+              {monthTotal > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 20, marginBottom: 24 }}>
+                  {/* Donut chart */}
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                    <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>По категориям</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                      <PieChart width={140} height={140}>
+                        <Pie data={byCategory} cx={65} cy={65} innerRadius={38} outerRadius={62} dataKey="value" strokeWidth={0}>
+                          {byCategory.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                        </Pie>
+                      </PieChart>
+                      <div style={{ flex: 1 }}>
+                        {byCategory.map((c, i) => (
+                          <div key={c.name} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                            <div style={{ flex: 1, fontSize: 11, color: s.text }}>{c.name}</div>
+                            <div style={{ fontSize: 11, color: s.muted, fontWeight: 600 }}>{Math.round(c.value / monthTotal * 100)}%</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Daily bar chart */}
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                    <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Расходы по дням</h3>
+                    {dailyData.length > 0
+                      ? <ResponsiveContainer width="100%" height={130}>
+                          <BarChart data={dailyData}>
+                            <XAxis dataKey="day" stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} />
+                            <YAxis stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}к` : v} />
+                            <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} formatter={(v: any) => [`${v.toLocaleString("ru-RU")} ₸`, "Сумма"]} />
+                            <Bar dataKey="sum" fill="#e57373" radius={[3,3,0,0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      : <div style={{ color: s.muted, fontSize: 13, textAlign: "center", paddingTop: 40 }}>Нет данных</div>
+                    }
+                  </div>
                 </div>
               )}
 
-              {/* Filters */}
-              <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-                <select value={expenseFilter} onChange={(e) => setExpenseFilter(e.target.value)}
-                  style={{ backgroundColor: s.card, border: `1px solid ${s.border}`, color: s.text, padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
-                  {EXPENSE_CATS.map((c) => <option key={c} value={c}>{c === "all" ? "Все категории" : c}</option>)}
-                </select>
-                <input type="month" value={expenseMonth} onChange={(e) => setExpenseMonth(e.target.value)}
-                  style={{ backgroundColor: s.card, border: `1px solid ${s.border}`, color: s.text, padding: "7px 12px", borderRadius: 8, fontSize: 13 }} />
-                {(expenseFilter !== "all" || expenseMonth) && (
-                  <button onClick={() => { setExpenseFilter("all"); setExpenseMonth(""); }}
-                    style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
-                    Сбросить
+              {/* Add expense form — only for Дархан/Айдын/Алиби */}
+              {canAddExpense && (
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24, border: `1px solid ${s.border}` }}>
+                  <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 18 }}>Добавить расход</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                    {/* Description with autocomplete */}
+                    <div style={{ gridColumn: "1 / -1", position: "relative" }}>
+                      <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Описание *</label>
+                      <input
+                        value={expForm.description}
+                        onChange={(e) => { setExpForm((f) => ({ ...f, description: e.target.value })); getExpDescSuggestions(e.target.value); }}
+                        onBlur={() => setTimeout(() => setExpDescSuggestions([]), 150)}
+                        placeholder="Например: мука, масло 82%, зарплата за июль..."
+                        style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                      />
+                      {expDescSuggestions.length > 0 && (
+                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: "#222", border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 20, overflow: "hidden", marginTop: 2 }}>
+                          {expDescSuggestions.map((d) => (
+                            <div key={d} onClick={() => { setExpForm((f) => ({ ...f, description: d })); setExpDescSuggestions([]); }}
+                              style={{ padding: "9px 14px", cursor: "pointer", fontSize: 13, borderBottom: `1px solid ${s.border}` }}
+                              onMouseEnter={e => e.currentTarget.style.backgroundColor = s.card}
+                              onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                              {d}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Category */}
+                    <div>
+                      <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Категория</label>
+                      <select value={expForm.category} onChange={(e) => setExpForm((f) => ({ ...f, category: e.target.value, unit: "" }))}
+                        style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13 }}>
+                        {EXPENSE_CATS.map((c) => <option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Unit — show if ингредиенты or упаковка */}
+                    {(expForm.category === "ингредиенты" || expForm.category === "упаковка") ? (
+                      <div>
+                        <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Кол-во + ед. измерения</label>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input
+                            type="number" placeholder="25"
+                            value={expForm.quantity_amount}
+                            onChange={(e) => setExpForm((f) => ({ ...f, quantity_amount: e.target.value }))}
+                            style={{ width: 80, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 10px", color: s.text, fontSize: 13, outline: "none" }}
+                          />
+                          <select value={expForm.unit} onChange={(e) => setExpForm((f) => ({ ...f, unit: e.target.value }))}
+                            style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 10px", color: s.text, fontSize: 13 }}>
+                            <option value="">— ед.</option>
+                            {UNITS.map((u) => <option key={u}>{u}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    ) : <div />}
+
+                    {/* Amount */}
+                    <div>
+                      <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Сумма (₸) *</label>
+                      <input
+                        type="number" placeholder="15000"
+                        value={expForm.amount}
+                        onChange={(e) => setExpForm((f) => ({ ...f, amount: e.target.value }))}
+                        style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                      />
+                    </div>
+
+                    {/* Date */}
+                    <div>
+                      <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Дата</label>
+                      <input
+                        type="date" value={expForm.expense_date}
+                        onChange={(e) => setExpForm((f) => ({ ...f, expense_date: e.target.value }))}
+                        style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Payment type */}
+                  <div style={{ marginTop: 14 }}>
+                    <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 8 }}>Тип оплаты</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {PAY_TYPES.map((pt) => (
+                        <button key={pt} onClick={() => setExpForm((f) => ({ ...f, payment_type: pt }))}
+                          style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${expForm.payment_type === pt ? s.gold : s.border}`, background: expForm.payment_type === pt ? s.gold + "22" : "none", color: expForm.payment_type === pt ? s.gold : s.muted, fontSize: 13, cursor: "pointer", fontWeight: expForm.payment_type === pt ? 700 : 400 }}>
+                          {pt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button onClick={addExpense} disabled={expSaving || !expForm.description || !expForm.amount}
+                    style={{ marginTop: 18, width: "100%", backgroundColor: (expSaving || !expForm.description || !expForm.amount) ? s.border : s.gold, border: "none", borderRadius: 8, padding: "11px", color: (expSaving || !expForm.description || !expForm.amount) ? s.muted : "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                    {expSaving ? "Сохранение..." : "Добавить расход"}
                   </button>
-                )}
+                </div>
+              )}
+
+              {/* Filter by category */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+                {["all", ...EXPENSE_CATS].map((c) => (
+                  <button key={c} onClick={() => setExpenseFilter(c)}
+                    style={{ padding: "5px 12px", borderRadius: 20, border: `1px solid ${expenseFilter === c ? s.gold : s.border}`, background: expenseFilter === c ? s.gold + "22" : "none", color: expenseFilter === c ? s.gold : s.muted, fontSize: 12, cursor: "pointer" }}>
+                    {c === "all" ? "Все" : c}
+                  </button>
+                ))}
               </div>
 
               {/* Table */}
-              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+              <div style={{ backgroundColor: s.card, borderRadius: 12, overflow: "hidden" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${s.border}` }}>
-                      {["Дата","Категория","Описание","Сумма","Чек","Кто"].map((h) => (
-                        <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600 }}>{h}</th>
+                      {["Дата","Категория","Описание","Кол-во","Тип оплаты","Сумма","Кто",""].map((h) => (
+                        <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.length === 0 && (
-                      <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: s.muted }}>Нет данных. Создайте WhatsApp чат для расходов и настройте EXPENSES_CHAT_ID.</td></tr>
+                    {filteredExpenses.length === 0 && (
+                      <tr><td colSpan={8} style={{ padding: 32, textAlign: "center", color: s.muted }}>Нет расходов за {expMonthLabel}</td></tr>
                     )}
-                    {filtered.map((e) => (
+                    {filteredExpenses.map((e) => (
                       <tr key={e.id} style={{ borderBottom: `1px solid ${s.border}` }}>
-                        <td style={{ padding: "10px 14px", color: s.muted }}>{e.expense_date || "—"}</td>
+                        <td style={{ padding: "10px 14px", color: s.muted, whiteSpace: "nowrap" }}>{e.expense_date || "—"}</td>
                         <td style={{ padding: "10px 14px" }}>
                           <span style={{ background: "#2a2825", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>{e.category || "прочее"}</span>
                         </td>
-                        <td style={{ padding: "10px 14px", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description || e.raw_message?.slice(0,80)}</td>
-                        <td style={{ padding: "10px 14px", color: "#e57373", fontWeight: 700 }}>{e.amount ? `${e.amount.toLocaleString("ru-RU")} ₸` : "—"}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "center" }}>{e.has_receipt ? "✅" : "—"}</td>
+                        <td style={{ padding: "10px 14px", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description || "—"}</td>
+                        <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>
+                          {e.quantity_amount ? `${e.quantity_amount} ${e.unit || ""}` : "—"}
+                        </td>
+                        <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{e.payment_type || "—"}</td>
+                        <td style={{ padding: "10px 14px", color: "#e57373", fontWeight: 700 }}>{e.amount ? `${Number(e.amount).toLocaleString("ru-RU")} ₸` : "—"}</td>
                         <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{e.confirmed_by || "—"}</td>
+                        <td style={{ padding: "10px 14px" }}>
+                          {canAddExpense && (
+                            <button onClick={() => deleteExpense(e.id)}
+                              style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-
-              {/* WhatsApp template */}
-              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginTop: 24, borderLeft: `3px solid ${s.gold}` }}>
-                <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Шаблон для WhatsApp чата расходов</h3>
-                <pre style={{ backgroundColor: s.bg, borderRadius: 8, padding: 16, fontSize: 12, color: s.text, lineHeight: 1.8, margin: 0, overflowX: "auto" }}>
-{`— Одна статья:
-💸 РАСХОД
-Категория: ингредиенты
-Сумма: 15000 тг
-Описание: мука, масло
-Дата: 01.07.2026
-📎 [фото чека]
-
-— Накладная с позициями:
-💸 РАСХОД
-Категория: ингредиенты
-Дата: 01.07.2026
-мука 25кг — 9 000
-кремчиз 1,5кг — 2 880
-масло 82% 1кг — 1 200
-Итого: 13 080
-📎 [фото накладной]`}
-                </pre>
-                <p style={{ color: s.muted, fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-                  Отправляйте в чат расходов. Система автоматически распознает сумму, категорию и наличие чека.
-                </p>
               </div>
             </div>
           );
