@@ -49,6 +49,8 @@ export default function Dashboard() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [userForm, setUserForm] = useState({ name: "", role: "", pin: "" });
+  const [editingOrder, setEditingOrder] = useState<any>(null);
+  const [orderEditForm, setOrderEditForm] = useState<any>({});
 
   const fetchClients = async () => {
     const { data } = await supabase.from("berrycake_clients").select("*").order("name");
@@ -238,6 +240,42 @@ export default function Dashboard() {
   const updateStatus = async (id, status) => {
     await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
     setOrders((prev) => prev.map((o) => o.id === id ? { ...o, status } : o));
+  };
+
+  const openEditOrder = (o: any) => {
+    setEditingOrder(o);
+    setOrderEditForm({
+      client_name: o.client_name || "",
+      phone: o.phone || "",
+      cake_flavor: o.cake_flavor || "",
+      quantity: o.quantity ?? "",
+      order_date: o.order_date || "",
+      order_time: o.order_time || "",
+      address: o.address || "",
+      notes: o.notes || "",
+      status: o.status || "new",
+      payment_type: o.payment_type || "",
+      paid_amount: o.paid_amount ?? "",
+      total_amount: o.total_amount ?? "",
+    });
+  };
+
+  const saveOrderEdit = async () => {
+    const payload = {
+      ...orderEditForm,
+      quantity: orderEditForm.quantity !== "" ? Number(orderEditForm.quantity) : null,
+      paid_amount: orderEditForm.paid_amount !== "" ? Number(orderEditForm.paid_amount) : null,
+      total_amount: orderEditForm.total_amount !== "" ? Number(orderEditForm.total_amount) : null,
+    };
+    await supabase.from("berrycake_orders").update(payload).eq("id", editingOrder.id);
+    setOrders((prev) => prev.map((o) => o.id === editingOrder.id ? { ...o, ...payload } : o));
+    setEditingOrder(null);
+  };
+
+  const deleteOrder = async (id: string) => {
+    if (!confirm("Удалить заказ?")) return;
+    await supabase.from("berrycake_orders").delete().eq("id", id);
+    setOrders((prev) => prev.filter((o) => o.id !== id));
   };
 
   const exportCSV = () => {
@@ -488,6 +526,7 @@ export default function Dashboard() {
                           {l}{sortField === f ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                         </th>
                       ))}
+                      <th style={{ padding: "12px 14px", color: s.muted, fontWeight: 600 }}></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -505,6 +544,16 @@ export default function Dashboard() {
                             style={{ backgroundColor: `${(STATUSES[o.status || "new"] || STATUSES.new).color}22`, border: `1px solid ${(STATUSES[o.status || "new"] || STATUSES.new).color}`, borderRadius: 6, padding: "3px 8px", color: (STATUSES[o.status || "new"] || STATUSES.new).color, fontSize: 12, cursor: "pointer" }}>
                             {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                           </select>
+                        </td>
+                        <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                          <button onClick={() => openEditOrder(o)}
+                            style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12, marginRight: 6 }}>
+                            ✏️
+                          </button>
+                          <button onClick={() => deleteOrder(o.id)}
+                            style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>
+                            ✕
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -845,6 +894,52 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Edit Order Modal */}
+      {editingOrder && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+          <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: 520, maxHeight: "90vh", overflowY: "auto" }}>
+            <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 20 }}>Редактировать заказ</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {[
+                ["client_name","Клиент"],["phone","Телефон"],
+                ["cake_flavor","Вкус"],["quantity","Количество (шт)"],
+                ["order_date","Дата (ГГГГ-ММ-ДД)"],["order_time","Время (ЧЧ:ММ)"],
+                ["address","Адрес"],["payment_type","Тип оплаты"],
+                ["paid_amount","Оплачено (₸)"],["total_amount","Сумма (₸)"],
+              ].map(([field, label]) => (
+                <div key={field}>
+                  <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 4 }}>{label}</label>
+                  <input value={orderEditForm[field] ?? ""} onChange={(e) => setOrderEditForm((f) => ({ ...f, [field]: e.target.value }))}
+                    style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "7px 10px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 4 }}>Заметки</label>
+              <textarea value={orderEditForm.notes ?? ""} onChange={(e) => setOrderEditForm((f) => ({ ...f, notes: e.target.value }))} rows={2}
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "7px 10px", color: s.text, fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 4 }}>Статус</label>
+              <select value={orderEditForm.status} onChange={(e) => setOrderEditForm((f) => ({ ...f, status: e.target.value }))}
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "7px 10px", color: s.text, fontSize: 13 }}>
+                {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
+              <button onClick={saveOrderEdit}
+                style={{ flex: 1, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px", color: "#0f0e0c", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                Сохранить
+              </button>
+              <button onClick={() => setEditingOrder(null)}
+                style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "10px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* User Modal */}
       {showUserModal && (
