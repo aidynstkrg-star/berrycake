@@ -10,7 +10,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-const STATUSES = { new: { label: "Новый", color: "#c8a96e" }, in_progress: { label: "В работе", color: "#64b5f6" }, done: { label: "Готов", color: "#81c784" }, delivered: { label: "Доставлен", color: "#888" } };
+const STATUSES: Record<string, { label: string; color: string }> = { new: { label: "Новый", color: "#c8a96e" }, in_progress: { label: "В работе", color: "#64b5f6" }, done: { label: "Готов", color: "#81c784" }, delivered: { label: "Доставлен", color: "#888" }, cancellation_requested: { label: "Запрос отмены", color: "#ff9800" }, cancelled: { label: "Отменён", color: "#e57373" } };
+const CANCEL_APPROVERS = ["Дархан", "Айдын"];
 const TABS = ["Обзор", "Заказы", "Клиенты", "Расходы", "Аналитика ИИ", "Настройки"];
 
 export default function Dashboard() {
@@ -33,7 +34,9 @@ export default function Dashboard() {
   const [aiResult, setAiResult] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState({ client_name: "", phone: "", cake_flavor: "", quantity: "", order_date: "", order_time: "", address: "", notes: "" });
+  const [addForm, setAddForm] = useState({ client_name: "", phone: "", cake_flavor: "", quantity: "", order_date: new Date().toISOString().slice(0,10), order_time: "", address: "", notes: "", total_amount: "", payment_type: "" });
+  const [addClientQuery, setAddClientQuery] = useState("");
+  const [addClientSuggestions, setAddClientSuggestions] = useState<any[]>([]);
   const [topClients, setTopClients] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -208,6 +211,12 @@ export default function Dashboard() {
     setFlavorStats(Object.entries(flavorMap).map(([flavor, count]) => ({ flavor, count })).sort((a, b) => b.count - a.count));
   };
 
+  useEffect(() => {
+    if (!addClientQuery.trim()) { setAddClientSuggestions([]); return; }
+    const q = addClientQuery.toLowerCase();
+    setAddClientSuggestions(clients.filter((c) => c.name.toLowerCase().includes(q) || (c.phone||"").includes(q)).slice(0, 6));
+  }, [addClientQuery, clients]);
+
   const buildTopClients = (data) => {
     const map = {};
     data.forEach((o) => {
@@ -293,9 +302,26 @@ export default function Dashboard() {
   };
 
   const addOrder = async () => {
-    await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(addForm) });
+    const payload = {
+      ...addForm,
+      quantity: addForm.quantity ? Number(addForm.quantity) : null,
+      total_amount: addForm.total_amount ? Number(addForm.total_amount) : null,
+      status: "new",
+    };
+    await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     setShowAddModal(false);
-    setAddForm({ client_name: "", phone: "", cake_flavor: "", quantity: "", order_date: "", order_time: "", address: "", notes: "" });
+    setAddForm({ client_name: "", phone: "", cake_flavor: "", quantity: "", order_date: new Date().toISOString().slice(0,10), order_time: "", address: "", notes: "", total_amount: "", payment_type: "" });
+    setAddClientQuery("");
+    fetchAll();
+  };
+
+  const approveCancellation = async (order: any) => {
+    await supabase.from("berrycake_orders").update({ status: "cancelled" }).eq("id", order.id);
+    fetchAll();
+  };
+
+  const rejectCancellation = async (order: any) => {
+    await supabase.from("berrycake_orders").update({ status: order.previous_status || "new", cancellation_reason: null }).eq("id", order.id);
     fetchAll();
   };
 
@@ -807,6 +833,36 @@ export default function Dashboard() {
           );
         })()}
 
+        {/* ── Cancellation requests banner (visible on all tabs for approvers) ── */}
+        {CANCEL_APPROVERS.includes(user?.name) && (() => {
+          const pending = orders.filter((o) => o.status === "cancellation_requested");
+          if (!pending.length) return null;
+          return (
+            <div style={{ backgroundColor:"#1a1200", border:"1px solid #ff980066", borderRadius:12, padding:16, marginBottom:24 }}>
+              <div style={{ color:"#ff9800", fontWeight:700, fontSize:14, marginBottom:12 }}>⚠️ Запросы на отмену заказов ({pending.length})</div>
+              {pending.map((o)=>(
+                <div key={o.id} style={{ backgroundColor:"#0f0e0c", borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+                  <div>
+                    <div style={{ color:s.text, fontWeight:600, fontSize:14 }}>{o.client_name||"—"} · {o.cake_flavor||"—"} · {o.quantity||"—"} шт</div>
+                    <div style={{ color:s.muted, fontSize:12, marginTop:4 }}>Дата: {o.order_date||"—"}</div>
+                    <div style={{ color:"#ff9800", fontSize:13, marginTop:4 }}>Причина: «{o.cancellation_reason}»</div>
+                  </div>
+                  <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+                    <button onClick={()=>approveCancellation(o)}
+                      style={{ backgroundColor:"#e5737322", border:"1px solid #e57373", color:"#e57373", borderRadius:8, padding:"6px 14px", cursor:"pointer", fontSize:13, fontWeight:600 }}>
+                      Подтвердить
+                    </button>
+                    <button onClick={()=>rejectCancellation(o)}
+                      style={{ backgroundColor:"#4caf5022", border:"1px solid #4caf50", color:"#81c784", borderRadius:8, padding:"6px 14px", cursor:"pointer", fontSize:13, fontWeight:600 }}>
+                      Отклонить
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* ── TAB 5: Настройки ── */}
         {tab === 5 && (
           <div style={{ maxWidth: 720 }}>
@@ -981,27 +1037,70 @@ export default function Dashboard() {
 
       {/* Add Order Modal */}
       {showAddModal && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-          <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: 480, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
+          <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto" }}>
             <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 20 }}>Новый заказ</h2>
-            {[
-              ["client_name","Клиент / магазин"],["phone","Телефон"],["cake_flavor","Вкус"],
-              ["quantity","Количество (шт)"],["order_date","Дата (ГГГГ-ММ-ДД)"],["order_time","Время (ЧЧ:ММ)"],
-              ["address","Адрес"],["notes","Заметки"],
-            ].map(([field, label]) => (
-              <div key={field} style={{ marginBottom: 14 }}>
-                <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>{label}</label>
-                <input value={addForm[field]} onChange={(e) => setAddForm((f) => ({ ...f, [field]: e.target.value }))}
-                  style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
-              </div>
-            ))}
+
+            {/* Client search */}
+            <div style={{ marginBottom: 14, position: "relative" }}>
+              <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Клиент</label>
+              <input
+                value={addClientQuery}
+                onChange={(e) => {
+                  setAddClientQuery(e.target.value);
+                  setAddForm((f) => ({ ...f, client_name: e.target.value, phone: "" }));
+                }}
+                placeholder="Поиск из базы или введите имя..."
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+              />
+              {addClientSuggestions.length > 0 && (
+                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: "#222", border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 10, overflow: "hidden", marginTop: 2 }}>
+                  {addClientSuggestions.map((c) => (
+                    <div key={c.id}
+                      onClick={() => { setAddForm((f) => ({ ...f, client_name: c.name, phone: c.phone || "" })); setAddClientQuery(c.name); setAddClientSuggestions([]); }}
+                      style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${s.border}`, fontSize: 13 }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = s.card}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                      <span style={{ color: s.gold, fontWeight: 600 }}>{c.name}</span>
+                      {c.phone && <span style={{ color: s.muted, fontSize: 12, marginLeft: 10 }}>{c.phone}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {[
+                ["phone","Телефон"], ["cake_flavor","Вкус"],
+                ["quantity","Количество (шт)"], ["order_date","Дата"],
+                ["order_time","Время (ЧЧ:ММ)"], ["address","Адрес"],
+                ["total_amount","Сумма (₸)"], ["payment_type","Тип оплаты"],
+              ].map(([field, label]) => (
+                <div key={field}>
+                  <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>{label}</label>
+                  <input
+                    type={field === "order_date" ? "date" : "text"}
+                    value={addForm[field]}
+                    onChange={(e) => setAddForm((f) => ({ ...f, [field]: e.target.value }))}
+                    style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 10px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Заметки</label>
+              <textarea value={addForm.notes} onChange={(e) => setAddForm((f) => ({ ...f, notes: e.target.value }))} rows={2}
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
+            </div>
+
             <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-              <button onClick={addOrder}
-                style={{ flex: 1, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px", color: "#0f0e0c", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
-                Добавить
+              <button onClick={addOrder} disabled={!addForm.client_name}
+                style={{ flex: 2, backgroundColor: addForm.client_name ? s.gold : s.border, border: "none", borderRadius: 8, padding: "11px", color: addForm.client_name ? "#0f0e0c" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                Добавить заказ
               </button>
-              <button onClick={() => setShowAddModal(false)}
-                style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "10px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
+              <button onClick={() => { setShowAddModal(false); setAddClientQuery(""); setAddClientSuggestions([]); }}
+                style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "11px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
                 Отмена
               </button>
             </div>
