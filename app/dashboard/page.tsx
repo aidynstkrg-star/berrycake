@@ -12,7 +12,10 @@ const supabase = createClient(
 
 const STATUSES: Record<string, { label: string; color: string }> = { new: { label: "Новый", color: "#c8a96e" }, in_progress: { label: "В работе", color: "#64b5f6" }, done: { label: "Готов", color: "#81c784" }, delivered: { label: "Доставлен", color: "#888" }, cancellation_requested: { label: "Запрос отмены", color: "#ff9800" }, cancelled: { label: "Отменён", color: "#e57373" } };
 const CANCEL_APPROVERS = ["Дархан", "Айдын"];
-const TABS = ["Обзор", "Заказы", "Клиенты", "Расходы", "Аналитика ИИ", "Настройки"];
+const TABS = ["Обзор", "Заказы", "Клиенты", "Расходы", "Производство", "Аналитика ИИ", "Настройки"];
+const PROD_FLAVORS = ["ВУПИ", "МОЛОЧКА", "ЯГОДНЫЙ", "НУТЕЛЛА", "СНИКЕРС", "СГУЩЕНКА ОРЕХ"];
+const FLAVOR_COLORS: Record<string, string> = { "ВУПИ": "#f06292", "МОЛОЧКА": "#64b5f6", "ЯГОДНЫЙ": "#81c784", "НУТЕЛЛА": "#a1887f", "СНИКЕРС": "#ffb74d", "СГУЩЕНКА ОРЕХ": "#e57373" };
+const PIE_COLORS_PROD = ["#c8a96e","#64b5f6","#81c784","#e57373","#f06292","#ffb74d"];
 
 export default function Dashboard() {
   const router = useRouter();
@@ -57,6 +60,12 @@ export default function Dashboard() {
   const [userForm, setUserForm] = useState({ name: "", role: "", pin: "" });
   const [editingOrder, setEditingOrder] = useState<any>(null);
   const [orderEditForm, setOrderEditForm] = useState<any>({});
+  const [recipes, setRecipes] = useState<any[]>([]);
+  const [production, setProduction] = useState<any[]>([]);
+  const [prodMonth, setProdMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [editingRecipe, setEditingRecipe] = useState<any>(null);
+  const [recipeForm, setRecipeForm] = useState<any>({ flavor: "", yield_count: 12, notes: "", ingredients: [] });
+  const [showRecipeModal, setShowRecipeModal] = useState(false);
 
   const fetchClients = async () => {
     const { data } = await supabase.from("berrycake_clients").select("*").order("name");
@@ -115,6 +124,47 @@ export default function Dashboard() {
     await supabase.from("berrycake_users").delete().eq("id", id);
     fetchUsers();
   };
+
+  const fetchRecipes = async () => {
+    const { data } = await supabase.from("berrycake_recipes").select("*").order("flavor");
+    if (data) setRecipes(data);
+  };
+
+  const fetchProduction = async () => {
+    const { data } = await supabase.from("berrycake_production").select("*").order("bake_date", { ascending: false }).limit(500);
+    if (data) setProduction(data);
+  };
+
+  const saveRecipe = async () => {
+    const payload = { flavor: recipeForm.flavor, yield_count: parseInt(recipeForm.yield_count) || 12, notes: recipeForm.notes || null, ingredients: recipeForm.ingredients };
+    if (editingRecipe) {
+      await supabase.from("berrycake_recipes").update(payload).eq("id", editingRecipe.id);
+    } else {
+      await supabase.from("berrycake_recipes").insert(payload);
+    }
+    setShowRecipeModal(false);
+    setEditingRecipe(null);
+    setRecipeForm({ flavor: "", yield_count: 12, notes: "", ingredients: [] });
+    fetchRecipes();
+  };
+
+  const deleteRecipe = async (id: string) => {
+    if (!confirm("Удалить тех карту?")) return;
+    await supabase.from("berrycake_recipes").delete().eq("id", id);
+    fetchRecipes();
+  };
+
+  const openEditRecipe = (r: any) => {
+    setEditingRecipe(r);
+    setRecipeForm({ flavor: r.flavor, yield_count: r.yield_count, notes: r.notes || "", ingredients: r.ingredients || [] });
+    setShowRecipeModal(true);
+  };
+
+  const addIngredientRow = () => setRecipeForm((f: any) => ({ ...f, ingredients: [...f.ingredients, { name: "", amount: "", unit: "г" }] }));
+  const updateIngredient = (i: number, key: string, val: string) => setRecipeForm((f: any) => {
+    const ing = [...f.ingredients]; ing[i] = { ...ing[i], [key]: val }; return { ...f, ingredients: ing };
+  });
+  const removeIngredient = (i: number) => setRecipeForm((f: any) => ({ ...f, ingredients: f.ingredients.filter((_: any, idx: number) => idx !== i) }));
 
   const fetchExpenses = async () => {
     const { data } = await supabase
@@ -201,6 +251,8 @@ export default function Dashboard() {
     fetchExpenses();
     fetchClients();
     fetchUsers();
+    fetchRecipes();
+    fetchProduction();
 
     const channel = supabase.channel("orders_realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "berrycake_orders" }, (payload) => {
@@ -1037,8 +1089,8 @@ export default function Dashboard() {
           );
         })()}
 
-        {/* ── TAB 5: Настройки ── */}
-        {tab === 5 && (
+        {/* ── TAB 6: Настройки ── */}
+        {tab === 6 && (
           <div style={{ maxWidth: 720 }}>
             {/* Профиль */}
             <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24 }}>
@@ -1099,8 +1151,222 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── TAB 4: Аналитика ИИ ── */}
-        {tab === 4 && (
+        {/* ── TAB 4: Производство ── */}
+        {tab === 4 && (() => {
+          const prevProdMonth = () => {
+            const [y, m] = prodMonth.split("-").map(Number);
+            const d = new Date(y, m - 2, 1);
+            setProdMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          };
+          const nextProdMonth = () => {
+            const [y, m] = prodMonth.split("-").map(Number);
+            const d = new Date(y, m, 1);
+            setProdMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+          };
+          const isCurrentProdMonth = prodMonth === new Date().toISOString().slice(0, 7);
+          const prodMonthLabel = new Date(prodMonth + "-01").toLocaleString("ru-RU", { month: "long", year: "numeric" });
+
+          const monthProd = production.filter((r) => r.bake_date?.startsWith(prodMonth));
+          const today = new Date().toISOString().slice(0, 10);
+          const todayProd = production.filter((r) => r.bake_date === today);
+
+          const totalBaked = monthProd.reduce((s, r) => s + (r.quantity || 0), 0);
+          const totalDefects = monthProd.reduce((s, r) => s + (r.defects || 0), 0);
+          const totalGood = totalBaked - totalDefects;
+          const defectRate = totalBaked > 0 ? ((totalDefects / totalBaked) * 100).toFixed(1) : "0";
+
+          const byFlavor: Record<string, { qty: number; defects: number }> = {};
+          monthProd.forEach((r) => {
+            if (!byFlavor[r.flavor]) byFlavor[r.flavor] = { qty: 0, defects: 0 };
+            byFlavor[r.flavor].qty += r.quantity || 0;
+            byFlavor[r.flavor].defects += r.defects || 0;
+          });
+
+          const byDay: Record<string, number> = {};
+          monthProd.forEach((r) => {
+            byDay[r.bake_date] = (byDay[r.bake_date] || 0) + (r.quantity || 0);
+          });
+          const dailyProdData = Object.entries(byDay).sort(([a],[b])=>a.localeCompare(b)).map(([date, qty]) => ({ day: date.slice(8), qty }));
+
+          // Cost calculation from expenses
+          const calcCost = (recipe: any) => {
+            if (!recipe?.ingredients?.length) return null;
+            let total = 0;
+            const breakdown: { name: string; amount: number; unit: string; unitCost: number; lineCost: number }[] = [];
+            for (const ing of recipe.ingredients) {
+              const matches = expenses.filter((e) =>
+                e.category === "ингредиенты" && e.description?.toLowerCase().includes(ing.name.toLowerCase()) && e.unit && e.quantity_amount
+              );
+              if (matches.length === 0) { breakdown.push({ ...ing, unitCost: 0, lineCost: 0 }); continue; }
+              const latest = matches.sort((a: any, b: any) => b.expense_date?.localeCompare(a.expense_date))[0];
+              const unitCost = (latest.amount || 0) / (latest.quantity_amount || 1);
+              const lineCost = unitCost * parseFloat(ing.amount || "0");
+              total += lineCost;
+              breakdown.push({ name: ing.name, amount: ing.amount, unit: ing.unit, unitCost, lineCost });
+            }
+            const perUnit = recipe.yield_count > 0 ? total / recipe.yield_count : total;
+            return { total, perUnit, breakdown };
+          };
+
+          return (
+            <div>
+              {/* Month nav */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 24 }}>
+                <button onClick={prevProdMonth} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 20 }}>‹</button>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ color: s.gold, fontWeight: 700, fontSize: 20, textTransform: "capitalize" }}>{prodMonthLabel}</div>
+                  {isCurrentProdMonth && <div style={{ color: s.muted, fontSize: 11, marginTop: 2 }}>текущий месяц</div>}
+                </div>
+                <button onClick={nextProdMonth} disabled={isCurrentProdMonth}
+                  style={{ background: "none", border: `1px solid ${isCurrentProdMonth ? s.bg : s.border}`, color: isCurrentProdMonth ? s.bg : s.muted, borderRadius: 8, padding: "6px 16px", cursor: isCurrentProdMonth ? "default" : "pointer", fontSize: 20 }}>›</button>
+              </div>
+
+              {/* Stat cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
+                {[
+                  { label: "Выпечено за месяц", val: totalBaked, color: s.gold },
+                  { label: "Годных", val: totalGood, color: "#81c784" },
+                  { label: "Брак", val: totalDefects, color: "#e57373" },
+                  { label: "% брака", val: `${defectRate}%`, color: totalDefects > 0 ? "#ff9800" : s.muted },
+                ].map((st) => (
+                  <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, borderLeft: `3px solid ${st.color}` }}>
+                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label}</div>
+                    <div style={{ color: st.color, fontSize: 26, fontWeight: 700 }}>{st.val}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Charts */}
+              {totalBaked > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 20, marginBottom: 28 }}>
+                  {/* By flavor donut */}
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                    <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>По вкусам</h3>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <PieChart width={130} height={130}>
+                        <Pie data={Object.entries(byFlavor).map(([name, v]) => ({ name, value: v.qty }))} cx={60} cy={60} innerRadius={35} outerRadius={58} dataKey="value" strokeWidth={0}>
+                          {Object.keys(byFlavor).map((f, i) => <Cell key={f} fill={PIE_COLORS_PROD[i % PIE_COLORS_PROD.length]} />)}
+                        </Pie>
+                      </PieChart>
+                      <div style={{ flex: 1 }}>
+                        {Object.entries(byFlavor).map(([f, v], i) => (
+                          <div key={f} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: PIE_COLORS_PROD[i % PIE_COLORS_PROD.length], flexShrink: 0 }} />
+                            <div style={{ flex: 1, fontSize: 11, color: s.text }}>{f}</div>
+                            <div style={{ fontSize: 11, color: s.muted, fontWeight: 600 }}>{v.qty}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Daily chart */}
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                    <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Выпечка по дням</h3>
+                    <ResponsiveContainer width="100%" height={130}>
+                      <BarChart data={dailyProdData}>
+                        <XAxis dataKey="day" stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} />
+                        <YAxis stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} formatter={(v: any) => [`${v} шт`, "Выпечено"]} />
+                        <Bar dataKey="qty" fill={s.gold} radius={[3,3,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Today's production log */}
+              {isCurrentProdMonth && todayProd.length > 0 && (
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 28 }}>
+                  <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Цех сегодня</h3>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {todayProd.map((r) => (
+                      <div key={r.id} style={{ backgroundColor: s.bg, borderRadius: 10, padding: "12px 16px", minWidth: 120, borderLeft: `3px solid ${FLAVOR_COLORS[r.flavor] || s.gold}` }}>
+                        <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 13 }}>{r.flavor}</div>
+                        <div style={{ color: s.text, fontSize: 20, fontWeight: 700, marginTop: 4 }}>{r.quantity} шт</div>
+                        {r.defects > 0 && <div style={{ color: "#e57373", fontSize: 12, marginTop: 2 }}>брак: {r.defects}</div>}
+                        {r.notes && <div style={{ color: s.muted, fontSize: 11, marginTop: 4 }}>{r.notes}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tech cards */}
+              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                  <h3 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Технические карты</h3>
+                  <button onClick={() => { setEditingRecipe(null); setRecipeForm({ flavor: "", yield_count: 12, notes: "", ingredients: [] }); setShowRecipeModal(true); }}
+                    style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "7px 16px", color: "#0f0e0c", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                    + Добавить
+                  </button>
+                </div>
+
+                {recipes.length === 0
+                  ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>Тех карты не заполнены. Добавьте рецепт для каждого вкуса.</div>
+                  : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+                      {recipes.map((r) => {
+                        const cost = calcCost(r);
+                        const clientPrice = clients.length > 0 ? clients.filter((c: any) => c.price_per_unit).map((c: any) => c.price_per_unit).reduce((a: number, b: number) => a + b, 0) / clients.filter((c: any) => c.price_per_unit).length : 0;
+                        return (
+                          <div key={r.id} style={{ backgroundColor: s.bg, borderRadius: 12, padding: 16, border: `1px solid ${s.border}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                              <div>
+                                <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 15 }}>{r.flavor}</div>
+                                <div style={{ color: s.muted, fontSize: 12, marginTop: 2 }}>Выход: {r.yield_count} шт с замеса</div>
+                              </div>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button onClick={() => openEditRecipe(r)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✏️</button>
+                                <button onClick={() => deleteRecipe(r.id)} style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                              </div>
+                            </div>
+
+                            {/* Ingredients */}
+                            {(r.ingredients || []).length > 0 && (
+                              <div style={{ marginBottom: 12 }}>
+                                {(r.ingredients || []).map((ing: any, i: number) => (
+                                  <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${s.border}` }}>
+                                    <span style={{ color: s.text }}>{ing.name}</span>
+                                    <span style={{ color: s.muted }}>{ing.amount} {ing.unit}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Cost */}
+                            {cost && cost.perUnit > 0 && (
+                              <div style={{ backgroundColor: s.card, borderRadius: 8, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                  <div style={{ color: s.muted, fontSize: 11 }}>Себестоимость / шт</div>
+                                  <div style={{ color: "#e57373", fontWeight: 700, fontSize: 16 }}>{Math.round(cost.perUnit).toLocaleString("ru-RU")} ₸</div>
+                                </div>
+                                {clientPrice > 0 && (
+                                  <div style={{ textAlign: "right" }}>
+                                    <div style={{ color: s.muted, fontSize: 11 }}>Маржа (сред.)</div>
+                                    <div style={{ color: "#81c784", fontWeight: 700, fontSize: 16 }}>+{Math.round(clientPrice - cost.perUnit).toLocaleString("ru-RU")} ₸</div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {cost && cost.perUnit === 0 && (
+                              <div style={{ color: s.muted, fontSize: 11, textAlign: "center", padding: "8px 0" }}>
+                                Добавьте расходы с ингредиентами для расчёта себестоимости
+                              </div>
+                            )}
+
+                            {r.notes && <div style={{ color: s.muted, fontSize: 12, marginTop: 10, fontStyle: "italic" }}>{r.notes}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                }
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── TAB 5: Аналитика ИИ ── */}
+        {tab === 5 && (
           <div style={{ maxWidth: 720 }}>
             <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24 }}>
               <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 8 }}>ИИ-аналитик BerryCake</h2>
@@ -1201,6 +1467,74 @@ export default function Dashboard() {
                 Сохранить
               </button>
               <button onClick={() => setShowUserModal(false)}
+                style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "10px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recipe Modal */}
+      {showRecipeModal && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
+          <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto" }}>
+            <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 20 }}>{editingRecipe ? "Редактировать тех карту" : "Новая тех карта"}</h2>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Вкус</label>
+              <select value={recipeForm.flavor} onChange={(e) => setRecipeForm((f: any) => ({ ...f, flavor: e.target.value }))}
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13 }}>
+                <option value="">— выберите —</option>
+                {PROD_FLAVORS.map((f) => <option key={f}>{f}</option>)}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Выход с 1 замеса (шт)</label>
+              <input type="number" value={recipeForm.yield_count} onChange={(e) => setRecipeForm((f: any) => ({ ...f, yield_count: e.target.value }))}
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <label style={{ color: s.muted, fontSize: 12 }}>Ингредиенты</label>
+                <button onClick={addIngredientRow}
+                  style={{ background: "none", border: `1px solid ${s.gold}`, color: s.gold, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>
+                  + Добавить
+                </button>
+              </div>
+              {recipeForm.ingredients.length === 0 && (
+                <div style={{ color: s.muted, fontSize: 12, textAlign: "center", padding: "12px 0" }}>Нет ингредиентов. Нажмите «+ Добавить»</div>
+              )}
+              {recipeForm.ingredients.map((ing: any, i: number) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                  <input placeholder="Название" value={ing.name} onChange={(e) => updateIngredient(i, "name", e.target.value)}
+                    style={{ flex: 2, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "7px 10px", color: s.text, fontSize: 13, outline: "none" }} />
+                  <input type="number" placeholder="0" value={ing.amount} onChange={(e) => updateIngredient(i, "amount", e.target.value)}
+                    style={{ width: 70, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "7px 8px", color: s.text, fontSize: 13, outline: "none" }} />
+                  <select value={ing.unit} onChange={(e) => updateIngredient(i, "unit", e.target.value)}
+                    style={{ width: 60, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "7px 6px", color: s.text, fontSize: 12 }}>
+                    {["г","кг","л","мл","шт","уп"].map((u) => <option key={u}>{u}</option>)}
+                  </select>
+                  <button onClick={() => removeIngredient(i)}
+                    style={{ background: "none", border: "none", color: "#e57373", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>✕</button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Заметки</label>
+              <textarea value={recipeForm.notes} onChange={(e) => setRecipeForm((f: any) => ({ ...f, notes: e.target.value }))} rows={2}
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", resize: "vertical", boxSizing: "border-box" }} />
+            </div>
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <button onClick={saveRecipe} disabled={!recipeForm.flavor}
+                style={{ flex: 2, backgroundColor: recipeForm.flavor ? s.gold : s.border, border: "none", borderRadius: 8, padding: "10px", color: recipeForm.flavor ? "#0f0e0c" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                {editingRecipe ? "Сохранить" : "Создать"}
+              </button>
+              <button onClick={() => setShowRecipeModal(false)}
                 style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "10px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
                 Отмена
               </button>

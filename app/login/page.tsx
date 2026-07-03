@@ -68,7 +68,7 @@ export default function LoginPage() {
         const data = await res.json();
         localStorage.setItem("bc_auth", JSON.stringify({ name: data.name, role: data.role }));
         setWelcome(data.name);
-        const dest = data.role === "Менеджер цеха" ? "/cashier" : "/dashboard";
+        const dest = data.role === "Менеджер цеха" ? "/cashier" : data.role === "Пекарь" ? "/production" : "/dashboard";
         setTimeout(() => router.replace(dest), 1600);
       } else {
         setError("Неверный PIN-код");
