@@ -1866,66 +1866,89 @@ export default function Dashboard() {
               {prodSubTab === 3 && (
                 <div>
                   {/* Header */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                     <div>
                       <h2 style={{ color: s.gold, fontSize: 16, margin: 0 }}>Ревизия склада</h2>
                       <div style={{ color: s.muted, fontSize: 12, marginTop: 4 }}>Расчётный остаток vs фактический</div>
                     </div>
                     <button onClick={() => { setShowRevisionForm(true); setRevisionActuals({}); }}
-                      style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                      + Провести ревизию
+                      style={{ backgroundColor: s.gold, border: "none", borderRadius: 10, padding: isMobile ? "11px 16px" : "9px 20px", color: "#ffffff", fontWeight: 700, fontSize: isMobile ? 14 : 14, cursor: "pointer" }}>
+                      + Ревизия
                     </button>
                   </div>
 
-                  {/* Current expected stock from catalog */}
+                  {/* Current expected stock — cards on mobile, table on desktop */}
                   {products.length > 0 && (
-                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
-                      <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>Расчётные остатки по каталогу</h3>
-                      {products.length === 0
-                        ? <div style={{ color: s.muted, fontSize: 13 }}>Добавьте товары в каталог (вкладка Склад)</div>
-                        : <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                            <thead>
-                              <tr style={{ borderBottom: `1px solid ${s.border}` }}>
-                                {["Товар","Ед.","Закуплено","Израсходовано","Расчётный остаток"].map((h) => (
-                                  <th key={h} style={{ padding: "8px 12px", textAlign: "left", color: s.muted, fontWeight: 600, fontSize: 12 }}>{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {products.map((p) => {
-                                const st = getProductStock(p);
-                                return (
-                                  <tr key={p.id} style={{ borderBottom: `1px solid ${s.border}` }}>
-                                    <td style={{ padding: "10px 12px", fontWeight: 600 }}>{p.name}</td>
-                                    <td style={{ padding: "10px 12px", color: s.muted }}>{p.unit}</td>
-                                    <td style={{ padding: "10px 12px", color: "#81c784" }}>{st.purchased > 0 ? fromBase(st.purchased, st.base) : "—"}</td>
-                                    <td style={{ padding: "10px 12px", color: "#e57373" }}>{st.consumed > 0 ? fromBase(st.consumed, st.base) : "—"}</td>
-                                    <td style={{ padding: "10px 12px" }}>
-                                      <span style={{ color: st.stock >= 0 ? s.gold : "#e57373", fontWeight: 700 }}>
-                                        {fromBase(Math.abs(st.stock), st.base)}{st.stock < 0 ? " ⚠️" : ""}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                      }
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? 14 : 20, marginBottom: 20 }}>
+                      <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 14 }}>Расчётные остатки</h3>
+                      {isMobile ? (
+                        <div>
+                          {products.map((p) => {
+                            const st = getProductStock(p);
+                            return (
+                              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: `1px solid ${s.border}` }}>
+                                <div>
+                                  <div style={{ color: s.text, fontWeight: 600, fontSize: 14 }}>{p.name}</div>
+                                  <div style={{ color: s.muted, fontSize: 12, marginTop: 2 }}>
+                                    <span style={{ color: "#81c784" }}>+{st.purchased > 0 ? fromBase(st.purchased, st.base) : "0"}</span>
+                                    {" / "}
+                                    <span style={{ color: "#e57373" }}>−{st.consumed > 0 ? fromBase(st.consumed, st.base) : "0"}</span>
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: "right" }}>
+                                  <div style={{ color: st.stock >= 0 ? s.gold : "#e57373", fontWeight: 700, fontSize: 16 }}>
+                                    {fromBase(Math.abs(st.stock), st.base)}{st.stock < 0 ? " ⚠️" : ""}
+                                  </div>
+                                  <div style={{ color: s.muted, fontSize: 11 }}>{p.unit}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                          <thead>
+                            <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                              {["Товар","Ед.","Закуплено","Израсходовано","Расчётный остаток"].map((h) => (
+                                <th key={h} style={{ padding: "8px 12px", textAlign: "left", color: s.muted, fontWeight: 600, fontSize: 12 }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {products.map((p) => {
+                              const st = getProductStock(p);
+                              return (
+                                <tr key={p.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                                  <td style={{ padding: "10px 12px", fontWeight: 600 }}>{p.name}</td>
+                                  <td style={{ padding: "10px 12px", color: s.muted }}>{p.unit}</td>
+                                  <td style={{ padding: "10px 12px", color: "#81c784" }}>{st.purchased > 0 ? fromBase(st.purchased, st.base) : "—"}</td>
+                                  <td style={{ padding: "10px 12px", color: "#e57373" }}>{st.consumed > 0 ? fromBase(st.consumed, st.base) : "—"}</td>
+                                  <td style={{ padding: "10px 12px" }}>
+                                    <span style={{ color: st.stock >= 0 ? s.gold : "#e57373", fontWeight: 700 }}>
+                                      {fromBase(Math.abs(st.stock), st.base)}{st.stock < 0 ? " ⚠️" : ""}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   )}
 
                   {/* Shopping list */}
                   {shoppingList.length > 0 && (
-                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? 14 : 20, marginBottom: 20 }}>
                       <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 4 }}>Список на закупку</h3>
-                      <div style={{ color: s.muted, fontSize: 12, marginBottom: 16 }}>На основе предстоящих заказов</div>
+                      <div style={{ color: s.muted, fontSize: 12, marginBottom: 14 }}>На основе предстоящих заказов</div>
                       {shoppingList.map((item) => (
-                        <div key={item.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${s.border}` }}>
+                        <div key={item.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderBottom: `1px solid ${s.border}` }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <span style={{ fontSize: 16 }}>{item.needToBuy ? "🔴" : "🟢"}</span>
-                            <span style={{ fontWeight: 600, fontSize: 13 }}>{item.name}</span>
+                            <span style={{ fontWeight: 600, fontSize: isMobile ? 14 : 13 }}>{item.name}</span>
                           </div>
-                          <div style={{ display: "flex", gap: 24, fontSize: 12 }}>
+                          <div style={{ display: "flex", gap: isMobile ? 12 : 24, fontSize: 12 }}>
                             <div style={{ textAlign: "right" }}>
                               <div style={{ color: s.muted }}>Нужно</div>
                               <div style={{ color: s.text, fontWeight: 600 }}>{fromBase(item.required, item.base)}</div>
@@ -1936,7 +1959,7 @@ export default function Dashboard() {
                             </div>
                             {item.needToBuy && (
                               <div style={{ textAlign: "right" }}>
-                                <div style={{ color: s.muted }}>Докупить</div>
+                                <div style={{ color: s.muted }}>Купить</div>
                                 <div style={{ color: "#e57373", fontWeight: 700 }}>{fromBase(item.deficit, item.base)}</div>
                               </div>
                             )}
@@ -1947,50 +1970,62 @@ export default function Dashboard() {
                   )}
 
                   {/* Revision history */}
-                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? 14 : 20, boxShadow: s.sh }}>
                     <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>История ревизий</h3>
                     {revisions.length === 0
                       ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>Ревизии ещё не проводились</div>
                       : revisions.map((rev) => (
-                          <div key={rev.id} style={{ backgroundColor: s.bg, borderRadius: 10, padding: 16, marginBottom: 12, border: `1px solid ${s.border}` }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                          <div key={rev.id} style={{ backgroundColor: s.bg, borderRadius: 10, padding: isMobile ? 12 : 16, marginBottom: 12, border: `1px solid ${s.border}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                               <div>
                                 <div style={{ color: s.gold, fontWeight: 700, fontSize: 14 }}>{rev.revision_date}</div>
-                                <div style={{ color: s.muted, fontSize: 12 }}>Провёл: {rev.conducted_by}</div>
+                                <div style={{ color: s.muted, fontSize: 12 }}>{rev.conducted_by}</div>
                               </div>
-                              <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
-                                <span style={{ color: "#e57373" }}>
-                                  Недостач: {(rev.items || []).filter((i: any) => i.diff < 0).length}
-                                </span>
-                                <span style={{ color: "#81c784" }}>
-                                  Излишков: {(rev.items || []).filter((i: any) => i.diff > 0).length}
-                                </span>
+                              <div style={{ display: "flex", gap: 10, fontSize: 12 }}>
+                                <span style={{ color: "#e57373" }}>−{(rev.items || []).filter((i: any) => i.diff < 0).length}</span>
+                                <span style={{ color: "#81c784" }}>+{(rev.items || []).filter((i: any) => i.diff > 0).length}</span>
                               </div>
                             </div>
-                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                              <thead>
-                                <tr style={{ borderBottom: `1px solid ${s.border}` }}>
-                                  {["Ингредиент","Расчётно","Факт","Расхождение"].map((h) => (
-                                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", color: s.muted, fontWeight: 600 }}>{h}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
+                            {isMobile ? (
+                              <div>
                                 {(rev.items || []).map((item: any, i: number) => (
-                                  <tr key={i} style={{ borderBottom: `1px solid ${s.border}` }}>
-                                    <td style={{ padding: "6px 8px" }}>{item.ingredient}</td>
-                                    <td style={{ padding: "6px 8px", color: s.muted }}>{fromBase(item.expected, item.unit)}</td>
-                                    <td style={{ padding: "6px 8px" }}>{fromBase(item.actual, item.unit)}</td>
-                                    <td style={{ padding: "6px 8px" }}>
-                                      <span style={{ color: item.diff === 0 ? s.muted : item.diff > 0 ? "#81c784" : "#e57373", fontWeight: 700 }}>
-                                        {item.diff > 0 ? "+" : ""}{fromBase(item.diff, item.unit)}
-                                        {Math.abs(item.diff) > item.expected * 0.1 && item.diff < 0 ? " ⚠️" : ""}
+                                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${s.border}` }}>
+                                    <span style={{ color: s.text, fontSize: 13, fontWeight: 500 }}>{item.ingredient}</span>
+                                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                      <span style={{ color: s.muted, fontSize: 12 }}>{fromBase(item.actual, item.unit)}</span>
+                                      <span style={{ fontSize: 13, fontWeight: 700, color: item.diff === 0 ? s.muted : item.diff > 0 ? "#81c784" : "#e57373" }}>
+                                        {item.diff > 0 ? "+" : ""}{fromBase(item.diff, item.unit)}{Math.abs(item.diff) > item.expected * 0.1 && item.diff < 0 ? " ⚠️" : ""}
                                       </span>
-                                    </td>
-                                  </tr>
+                                    </div>
+                                  </div>
                                 ))}
-                              </tbody>
-                            </table>
+                              </div>
+                            ) : (
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                <thead>
+                                  <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                                    {["Ингредиент","Расчётно","Факт","Расхождение"].map((h) => (
+                                      <th key={h} style={{ padding: "5px 8px", textAlign: "left", color: s.muted, fontWeight: 600 }}>{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(rev.items || []).map((item: any, i: number) => (
+                                    <tr key={i} style={{ borderBottom: `1px solid ${s.border}` }}>
+                                      <td style={{ padding: "6px 8px" }}>{item.ingredient}</td>
+                                      <td style={{ padding: "6px 8px", color: s.muted }}>{fromBase(item.expected, item.unit)}</td>
+                                      <td style={{ padding: "6px 8px" }}>{fromBase(item.actual, item.unit)}</td>
+                                      <td style={{ padding: "6px 8px" }}>
+                                        <span style={{ color: item.diff === 0 ? s.muted : item.diff > 0 ? "#81c784" : "#e57373", fontWeight: 700 }}>
+                                          {item.diff > 0 ? "+" : ""}{fromBase(item.diff, item.unit)}
+                                          {Math.abs(item.diff) > item.expected * 0.1 && item.diff < 0 ? " ⚠️" : ""}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
                             {rev.notes && <div style={{ color: s.muted, fontSize: 12, marginTop: 10, fontStyle: "italic" }}>{rev.notes}</div>}
                           </div>
                         ))
@@ -1999,10 +2034,10 @@ export default function Dashboard() {
 
                   {/* Revision form modal */}
                   {showRevisionForm && (
-                    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }}>
-                      <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto" }}>
-                        <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 6 }}>Ревизия склада</h2>
-                        <p style={{ color: s.muted, fontSize: 13, marginBottom: 20 }}>Введите фактическое количество каждого ингредиента</p>
+                    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", zIndex: 200, padding: isMobile ? 0 : 16 }}>
+                      <div style={{ backgroundColor: s.card, borderRadius: isMobile ? "20px 20px 0 0" : 16, padding: isMobile ? "24px 16px 40px" : 28, width: "100%", maxWidth: isMobile ? "100%" : 560, maxHeight: isMobile ? "92vh" : "90vh", overflowY: "auto", boxSizing: "border-box" }}>
+                        <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 4 }}>Ревизия склада</h2>
+                        <p style={{ color: s.muted, fontSize: 13, marginBottom: 20 }}>Введите фактическое количество</p>
 
                         {products.length === 0
                           ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
@@ -2014,21 +2049,21 @@ export default function Dashboard() {
                               const actualNum = parseFloat(actual || "0");
                               const diff = actualNum - Math.max(0, st.stock);
                               return (
-                                <div key={p.id} style={{ marginBottom: 14 }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                                    <label style={{ color: s.text, fontSize: 13, fontWeight: 600 }}>{p.name}</label>
-                                    <span style={{ color: s.muted, fontSize: 12 }}>расчётно: {fromBase(Math.max(0, st.stock), st.base)}</span>
+                                <div key={p.id} style={{ marginBottom: isMobile ? 18 : 14, backgroundColor: s.bg, borderRadius: 12, padding: isMobile ? "14px" : "12px 14px", border: `1px solid ${actual ? s.gold : s.border}` }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                                    <span style={{ color: s.text, fontSize: isMobile ? 15 : 13, fontWeight: 600 }}>{p.name}</span>
+                                    <span style={{ color: s.muted, fontSize: 12 }}>расч: {fromBase(Math.max(0, st.stock), st.base)} {st.base}</span>
                                   </div>
-                                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                                     <input
-                                      type="number" min="0" placeholder="0"
+                                      type="number" inputMode="decimal" min="0" placeholder="0"
                                       value={actual || ""}
                                       onChange={(e) => setRevisionActuals((prev) => ({ ...prev, [p.name]: e.target.value }))}
-                                      style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${actual ? s.gold : s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 14, outline: "none" }}
+                                      style={{ flex: 1, backgroundColor: s.card, border: `2px solid ${actual ? s.gold : s.border}`, borderRadius: 10, padding: isMobile ? "13px 14px" : "8px 12px", color: s.text, fontSize: isMobile ? 20 : 14, fontWeight: isMobile ? 700 : 400, outline: "none" }}
                                     />
                                     <span style={{ color: s.muted, fontSize: 13, minWidth: 30 }}>{st.base}</span>
                                     {actual && (
-                                      <span style={{ fontSize: 12, fontWeight: 700, minWidth: 70, textAlign: "right", color: diff >= 0 ? "#81c784" : "#e57373" }}>
+                                      <span style={{ fontSize: isMobile ? 15 : 12, fontWeight: 700, minWidth: 60, textAlign: "right", color: diff >= 0 ? "#81c784" : "#e57373" }}>
                                         {diff >= 0 ? `+${fromBase(diff, st.base)}` : `−${fromBase(Math.abs(diff), st.base)}`}
                                       </span>
                                     )}
@@ -2040,17 +2075,17 @@ export default function Dashboard() {
 
                         <div style={{ marginTop: 16, marginBottom: 20 }}>
                           <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Заметки</label>
-                          <textarea value={revisionNotes} onChange={(e) => setRevisionNotes(e.target.value)} rows={2} placeholder="Причины расхождений, замечания..."
-                            style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
+                          <textarea value={revisionNotes} onChange={(e) => setRevisionNotes(e.target.value)} rows={2} placeholder="Причины расхождений..."
+                            style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: isMobile ? "13px 12px" : "9px 12px", color: s.text, fontSize: isMobile ? 15 : 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
                         </div>
 
                         <div style={{ display: "flex", gap: 12 }}>
                           <button onClick={saveRevision} disabled={savingRevision || stockEntries.length === 0}
-                            style={{ flex: 2, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "11px", color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                            style={{ flex: 2, backgroundColor: s.gold, border: "none", borderRadius: 10, padding: isMobile ? "15px" : "11px", color: "#ffffff", fontWeight: 700, fontSize: isMobile ? 16 : 14, cursor: "pointer" }}>
                             {savingRevision ? "Сохранение..." : "Сохранить ревизию"}
                           </button>
                           <button onClick={() => setShowRevisionForm(false)}
-                            style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "11px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
+                            style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 10, padding: isMobile ? "15px" : "11px", color: s.muted, cursor: "pointer", fontSize: isMobile ? 15 : 14 }}>
                             Отмена
                           </button>
                         </div>
