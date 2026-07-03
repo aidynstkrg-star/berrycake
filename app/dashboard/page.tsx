@@ -264,7 +264,7 @@ export default function Dashboard() {
     const auth = JSON.parse(localStorage.getItem("bc_auth") || "{}");
     const items = products.map((p) => {
       const st = getProductStock(p);
-      const expected = Math.max(0, st.stock);
+      const expected = st.stock; // сохраняем реальный остаток, включая отрицательный
       const actualRaw = parseFloat(revisionActuals[p.name] || "0");
       const { val: actualBase } = toBaseUnit(actualRaw, st.base);
       return { ingredient: p.name, unit: st.base, expected: Math.round(expected), actual: Math.round(actualBase), diff: Math.round(actualBase - expected) };
@@ -2049,12 +2049,12 @@ export default function Dashboard() {
                               const st = getProductStock(p);
                               const actual = revisionActuals[p.name];
                               const actualNum = parseFloat(actual || "0");
-                              const diff = actualNum - Math.max(0, st.stock);
+                              const diff = actualNum - st.stock;
                               return (
                                 <div key={p.id} style={{ marginBottom: isMobile ? 18 : 14, backgroundColor: s.bg, borderRadius: 12, padding: isMobile ? "14px" : "12px 14px", border: `1px solid ${actual ? s.gold : s.border}` }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                                     <span style={{ color: s.text, fontSize: isMobile ? 15 : 13, fontWeight: 600 }}>{p.name}</span>
-                                    <span style={{ color: s.muted, fontSize: 12 }}>расч: {fromBase(Math.max(0, st.stock), st.base)} {st.base}</span>
+                                    <span style={{ color: st.stock < 0 ? "#e57373" : s.muted, fontSize: 12 }}>расч: {st.stock < 0 ? "−" : ""}{fromBase(Math.abs(st.stock), st.base)} {st.base}</span>
                                   </div>
                                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                                     <input
