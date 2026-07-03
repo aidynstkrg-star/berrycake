@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-const s = { bg: "#0f0e0c", card: "#1a1815", gold: "#c8a96e", text: "#f5f0e8", muted: "#888", border: "#2a2825" };
+const s = { bg: "#ffffff", card: "#f7f7f5", gold: "#1a1a1a", text: "#111111", muted: "#999999", border: "#e8e8e8" };
 const FLAVORS = ["ВУПИ", "МОЛОЧКА", "ЯГОДНЫЙ", "НУТЕЛЛА", "СНИКЕРС", "СГУЩЕНКА ОРЕХ"];
 const FLAVOR_COLORS: Record<string, string> = {
   "ВУПИ": "#f06292", "МОЛОЧКА": "#64b5f6", "ЯГОДНЫЙ": "#81c784",
@@ -117,7 +117,7 @@ export default function ProductionPage() {
                     width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
                     backgroundColor: step >= n ? s.gold : s.card,
                     border: `2px solid ${step >= n ? s.gold : s.border}`,
-                    color: step >= n ? "#0f0e0c" : s.muted,
+                    color: step >= n ? "#ffffff" : s.muted,
                     fontWeight: 700, fontSize: 14,
                   }}>{n}</div>
                   {n < 2 && <div style={{ width: 40, height: 2, backgroundColor: step > n ? s.gold : s.border }} />}
@@ -238,7 +238,7 @@ export default function ProductionPage() {
                     style={{
                       width: "100%", padding: "14px", borderRadius: 10, border: "none", cursor: "pointer",
                       backgroundColor: (saving || !qty || parseInt(qty) <= 0) ? s.border : s.gold,
-                      color: (saving || !qty || parseInt(qty) <= 0) ? s.muted : "#0f0e0c",
+                      color: (saving || !qty || parseInt(qty) <= 0) ? s.muted : "#ffffff",
                       fontWeight: 700, fontSize: 16,
                     }}>
                     {saving ? "Сохранение..." : "Записать"}

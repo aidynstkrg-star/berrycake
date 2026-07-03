@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-const s = { bg: "#0f0e0c", card: "#1a1815", gold: "#c8a96e", text: "#f5f0e8", muted: "#888", border: "#2a2825" };
+const s = { bg: "#ffffff", card: "#f7f7f5", gold: "#1a1a1a", text: "#111111", muted: "#999999", border: "#e8e8e8" };
 const SIZES = [{ label: "8 см", value: 8 }, { label: "12 см", value: 12 }, { label: "Другой", value: 0 }];
 const DEFAULT_FLAVORS = ["ВУПИ","МОЛОЧКА","ЯГОДНЫЙ","НУТЕЛЛА","СНИКЕРС","СГУЩЕНКА ОРЕХ"];
 
@@ -176,7 +176,7 @@ export default function CashierPage() {
                   {isWalkIn ? (walkInName||"Физ. лицо") : selectedClient?.name}
                 </p>
                 <button onClick={reset}
-                  style={{ backgroundColor:s.gold, border:"none", borderRadius:12, padding:"14px 40px", color:"#0f0e0c", fontWeight:700, fontSize:16, cursor:"pointer" }}>
+                  style={{ backgroundColor:s.gold, border:"none", borderRadius:12, padding:"14px 40px", color:"#ffffff", fontWeight:700, fontSize:16, cursor:"pointer" }}>
                   Новый заказ
                 </button>
               </div>
@@ -222,7 +222,7 @@ export default function CashierPage() {
                             color:s.text, fontSize:15, outline:"none", boxSizing:"border-box", marginBottom:12 }}/>
                         {customFlavor && (
                           <button onClick={()=>setStep(1)}
-                            style={{ width:"100%", backgroundColor:s.gold, border:"none", borderRadius:12, padding:"14px", color:"#0f0e0c", fontWeight:700, fontSize:16, cursor:"pointer" }}>
+                            style={{ width:"100%", backgroundColor:s.gold, border:"none", borderRadius:12, padding:"14px", color:"#ffffff", fontWeight:700, fontSize:16, cursor:"pointer" }}>
                             Далее →
                           </button>
                         )}
@@ -271,7 +271,7 @@ export default function CashierPage() {
                           <button onClick={()=>setStep(0)} style={{ flex:1, backgroundColor:s.border, border:"none", borderRadius:12, padding:"14px", color:s.muted, cursor:"pointer", fontSize:15 }}>← Назад</button>
                           <button onClick={()=>setStep(2)} disabled={!selectedClient}
                             style={{ flex:2, backgroundColor:selectedClient?s.gold:s.border, border:"none", borderRadius:12, padding:"14px",
-                              color:selectedClient?"#0f0e0c":s.muted, fontWeight:700, fontSize:16, cursor:selectedClient?"pointer":"default" }}>
+                              color:selectedClient?"#ffffff":s.muted, fontWeight:700, fontSize:16, cursor:selectedClient?"pointer":"default" }}>
                             Далее →
                           </button>
                         </div>
@@ -285,7 +285,7 @@ export default function CashierPage() {
                           style={{ width:"100%", backgroundColor:s.card, border:`1px solid ${s.border}`, borderRadius:10, padding:"12px 16px", color:s.text, fontSize:15, outline:"none", boxSizing:"border-box", marginBottom:20 }}/>
                         <div style={{ display:"flex", gap:12 }}>
                           <button onClick={()=>setIsWalkIn(false)} style={{ flex:1, backgroundColor:s.border, border:"none", borderRadius:12, padding:"14px", color:s.muted, cursor:"pointer", fontSize:15 }}>← Назад</button>
-                          <button onClick={()=>setStep(2)} style={{ flex:2, backgroundColor:s.gold, border:"none", borderRadius:12, padding:"14px", color:"#0f0e0c", fontWeight:700, fontSize:16, cursor:"pointer" }}>Далее →</button>
+                          <button onClick={()=>setStep(2)} style={{ flex:2, backgroundColor:s.gold, border:"none", borderRadius:12, padding:"14px", color:"#ffffff", fontWeight:700, fontSize:16, cursor:"pointer" }}>Далее →</button>
                         </div>
                       </>
                     )}
@@ -305,7 +305,7 @@ export default function CashierPage() {
                     </div>
                     <div style={{ display:"flex", gap:12 }}>
                       <button onClick={()=>setStep(1)} style={{ flex:1, backgroundColor:s.border, border:"none", borderRadius:12, padding:"14px", color:s.muted, cursor:"pointer", fontSize:15 }}>← Назад</button>
-                      <button onClick={()=>setStep(3)} style={{ flex:2, backgroundColor:s.gold, border:"none", borderRadius:12, padding:"14px", color:"#0f0e0c", fontWeight:700, fontSize:16, cursor:"pointer" }}>Далее →</button>
+                      <button onClick={()=>setStep(3)} style={{ flex:2, backgroundColor:s.gold, border:"none", borderRadius:12, padding:"14px", color:"#ffffff", fontWeight:700, fontSize:16, cursor:"pointer" }}>Далее →</button>
                     </div>
                   </div>
                 )}
@@ -318,7 +318,7 @@ export default function CashierPage() {
                       {SIZES.map((sz)=>(
                         <button key={sz.label} onClick={()=>setSize(sz.value)}
                           style={{ backgroundColor:size===sz.value?s.gold:s.card, border:`2px solid ${size===sz.value?s.gold:s.border}`,
-                            borderRadius:14, padding:"28px 12px", cursor:"pointer", color:size===sz.value?"#0f0e0c":s.text,
+                            borderRadius:14, padding:"28px 12px", cursor:"pointer", color:size===sz.value?"#ffffff":s.text,
                             fontSize:18, fontWeight:700, minHeight:90, transition:"all 0.15s" }}>
                           {sz.label}
                         </button>

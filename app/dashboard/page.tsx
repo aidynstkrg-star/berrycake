@@ -639,7 +639,7 @@ export default function Dashboard() {
 
   if (!user) return null;
 
-  const s = { bg: "#0f0e0c", card: "#1a1815", gold: "#c8a96e", text: "#f5f0e8", muted: "#888", border: "#2a2825" };
+  const s = { bg: "#ffffff", card: "#f7f7f5", gold: "#1a1a1a", text: "#111111", muted: "#999999", border: "#e8e8e8" };
 
   return (
     <div style={{ backgroundColor: s.bg, minHeight: "100vh", color: s.text, fontFamily: "sans-serif" }}>
@@ -659,7 +659,7 @@ export default function Dashboard() {
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {lastSync && <span style={{ color: s.muted, fontSize: 12 }}>{lastSync}</span>}
           <button onClick={syncNow} disabled={syncing}
-            style={{ background: syncing ? "#2a2825" : s.gold, border: "none", color: syncing ? s.muted : "#0f0e0c", padding: "6px 14px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: 13, fontWeight: 600 }}>
+            style={{ background: syncing ? "#2a2825" : s.gold, border: "none", color: syncing ? s.muted : "#ffffff", padding: "6px 14px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: 13, fontWeight: 600 }}>
             {syncing ? "Синхронизация..." : "Обновить"}
           </button>
           <span style={{ color: s.muted, fontSize: 13 }}>{user.name}</span>
@@ -837,7 +837,7 @@ export default function Dashboard() {
                 ↓ Excel
               </button>
               <button onClick={() => setShowAddModal(true)}
-                style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "8px 16px", color: "#0f0e0c", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "8px 16px", color: "#ffffff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
                 + Заказ
               </button>
             </div>
@@ -921,7 +921,7 @@ export default function Dashboard() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <h2 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Клиенты и ставки</h2>
                 <button onClick={() => { setEditingClient(null); setClientForm({ name: "", phone: "", price_per_unit: "", client_type: "розница", notes: "" }); setShowClientModal(true); }}
-                  style={{ background: s.gold, border: "none", color: "#0f0e0c", padding: "7px 16px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                  style={{ background: s.gold, border: "none", color: "#ffffff", padding: "7px 16px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
                   + Добавить клиента
                 </button>
               </div>
@@ -998,7 +998,7 @@ export default function Dashboard() {
                   <div style={{ display: "flex", gap: 10 }}>
                     <button onClick={() => setShowClientModal(false)} style={{ flex: 1, background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "9px 0", borderRadius: 8, cursor: "pointer" }}>Отмена</button>
                     <button onClick={saveClient} disabled={!clientForm.name}
-                      style={{ flex: 2, background: clientForm.name ? s.gold : s.border, color: clientForm.name ? "#0f0e0c" : s.muted, border: "none", padding: "9px 0", borderRadius: 8, cursor: clientForm.name ? "pointer" : "default", fontWeight: 700 }}>
+                      style={{ flex: 2, background: clientForm.name ? s.gold : s.border, color: clientForm.name ? "#ffffff" : s.muted, border: "none", padding: "9px 0", borderRadius: 8, cursor: clientForm.name ? "pointer" : "default", fontWeight: 700 }}>
                       {editingClient ? "Сохранить" : "Добавить"}
                     </button>
                   </div>
@@ -1211,7 +1211,7 @@ export default function Dashboard() {
                   </div>
 
                   <button onClick={addExpense} disabled={expSaving || !expForm.description || !expForm.amount}
-                    style={{ marginTop: 18, width: "100%", backgroundColor: (expSaving || !expForm.description || !expForm.amount) ? s.border : s.gold, border: "none", borderRadius: 8, padding: "11px", color: (expSaving || !expForm.description || !expForm.amount) ? s.muted : "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                    style={{ marginTop: 18, width: "100%", backgroundColor: (expSaving || !expForm.description || !expForm.amount) ? s.border : s.gold, border: "none", borderRadius: 8, padding: "11px", color: (expSaving || !expForm.description || !expForm.amount) ? s.muted : "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
                     {expSaving ? "Сохранение..." : "Добавить расход"}
                   </button>
                 </div>
@@ -1277,7 +1277,7 @@ export default function Dashboard() {
             <div style={{ backgroundColor:"#1a1200", border:"1px solid #ff980066", borderRadius:12, padding:16, marginBottom:24 }}>
               <div style={{ color:"#ff9800", fontWeight:700, fontSize:14, marginBottom:12 }}>⚠️ Запросы на отмену заказов ({pending.length})</div>
               {pending.map((o)=>(
-                <div key={o.id} style={{ backgroundColor:"#0f0e0c", borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+                <div key={o.id} style={{ backgroundColor:"#ffffff", borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
                   <div>
                     <div style={{ color:s.text, fontWeight:600, fontSize:14 }}>{o.client_name||"—"} · {o.cake_flavor||"—"} · {o.quantity||"—"} шт</div>
                     <div style={{ color:s.muted, fontSize:12, marginTop:4 }}>Дата: {o.order_date||"—"}</div>
@@ -1321,7 +1321,7 @@ export default function Dashboard() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                 <h2 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Пользователи</h2>
                 <button onClick={() => { setEditingUser(null); setUserForm({ name: "", role: "", pin: "" }); setShowUserModal(true); }}
-                  style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "7px 16px", color: "#0f0e0c", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "7px 16px", color: "#ffffff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                   + Добавить
                 </button>
               </div>
@@ -1522,7 +1522,7 @@ export default function Dashboard() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                     <h3 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Технические карты</h3>
                     <button onClick={() => { setEditingRecipe(null); setRecipeForm({ flavor: "", yield_count: 12, notes: "", ingredients: [] }); setShowRecipeModal(true); }}
-                      style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "7px 16px", color: "#0f0e0c", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                      style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "7px 16px", color: "#ffffff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                       + Добавить
                     </button>
                   </div>
@@ -1604,7 +1604,7 @@ export default function Dashboard() {
                         <div style={{ color: s.muted, fontSize: 12, marginTop: 4 }}>{products.length} позиций</div>
                       </div>
                       <button onClick={() => { setEditingProduct(null); setProductForm({ name: "", unit: "г", category: "ингредиент", notes: "" }); setShowProductModal(true); }}
-                        style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "9px 20px", color: "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                        style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
                         + Добавить товар
                       </button>
                     </div>
@@ -1686,7 +1686,7 @@ export default function Dashboard() {
                       <div style={{ color: s.muted, fontSize: 12, marginTop: 4 }}>Расчётный остаток vs фактический</div>
                     </div>
                     <button onClick={() => { setShowRevisionForm(true); setRevisionActuals({}); }}
-                      style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "9px 20px", color: "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                      style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "9px 20px", color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
                       + Провести ревизию
                     </button>
                   </div>
@@ -1860,7 +1860,7 @@ export default function Dashboard() {
 
                         <div style={{ display: "flex", gap: 12 }}>
                           <button onClick={saveRevision} disabled={savingRevision || stockEntries.length === 0}
-                            style={{ flex: 2, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "11px", color: "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                            style={{ flex: 2, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "11px", color: "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
                             {savingRevision ? "Сохранение..." : "Сохранить ревизию"}
                           </button>
                           <button onClick={() => setShowRevisionForm(false)}
@@ -1884,7 +1884,7 @@ export default function Dashboard() {
               <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 8 }}>ИИ-аналитик BerryCake</h2>
               <p style={{ color: s.muted, fontSize: 13, marginBottom: 20 }}>Claude проанализирует последние 200 заказов и даст рекомендации по вкусам, клиентам и трендам.</p>
               <button onClick={runAI} disabled={aiLoading}
-                style={{ backgroundColor: aiLoading ? s.border : s.gold, border: "none", borderRadius: 8, padding: "10px 24px", color: aiLoading ? s.muted : "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: aiLoading ? "default" : "pointer" }}>
+                style={{ backgroundColor: aiLoading ? s.border : s.gold, border: "none", borderRadius: 8, padding: "10px 24px", color: aiLoading ? s.muted : "#ffffff", fontWeight: 700, fontSize: 14, cursor: aiLoading ? "default" : "pointer" }}>
                 {aiLoading ? "⏳ Анализирую..." : "✨ Запустить анализ"}
               </button>
             </div>
@@ -1933,7 +1933,7 @@ export default function Dashboard() {
             </div>
             <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
               <button onClick={saveOrderEdit}
-                style={{ flex: 1, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px", color: "#0f0e0c", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                style={{ flex: 1, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px", color: "#ffffff", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
                 Сохранить
               </button>
               <button onClick={() => setEditingOrder(null)}
@@ -1975,7 +1975,7 @@ export default function Dashboard() {
             </div>
             <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
               <button onClick={saveUser} disabled={!userForm.name || !userForm.pin || userForm.pin.length < 4 || !userForm.role}
-                style={{ flex: 1, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px", color: "#0f0e0c", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                style={{ flex: 1, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px", color: "#ffffff", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
                 Сохранить
               </button>
               <button onClick={() => setShowUserModal(false)}
@@ -2038,7 +2038,7 @@ export default function Dashboard() {
 
               <div style={{ display: "flex", gap: 12 }}>
                 <button onClick={saveProduct} disabled={!productForm.name}
-                  style={{ flex: 2, backgroundColor: productForm.name ? s.gold : s.border, border: "none", borderRadius: 8, padding: "10px", color: productForm.name ? "#0f0e0c" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                  style={{ flex: 2, backgroundColor: productForm.name ? s.gold : s.border, border: "none", borderRadius: 8, padding: "10px", color: productForm.name ? "#ffffff" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
                   {editingProduct ? "Сохранить" : "Добавить"}
                 </button>
                 <button onClick={() => setShowProductModal(false)}
@@ -2102,7 +2102,7 @@ export default function Dashboard() {
 
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={savePrihod} disabled={savingPrihod || !prihodForm.quantity || !prihodForm.amount}
-                style={{ flex: 2, backgroundColor: (!prihodForm.quantity || !prihodForm.amount) ? s.border : "#81c784", border: "none", borderRadius: 8, padding: "11px", color: (!prihodForm.quantity || !prihodForm.amount) ? s.muted : "#0f0e0c", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                style={{ flex: 2, backgroundColor: (!prihodForm.quantity || !prihodForm.amount) ? s.border : "#81c784", border: "none", borderRadius: 8, padding: "11px", color: (!prihodForm.quantity || !prihodForm.amount) ? s.muted : "#ffffff", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
                 {savingPrihod ? "Сохранение..." : "Записать приход"}
               </button>
               <button onClick={() => setShowPrihodModal(false)}
@@ -2170,7 +2170,7 @@ export default function Dashboard() {
 
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={saveRecipe} disabled={!recipeForm.flavor}
-                style={{ flex: 2, backgroundColor: recipeForm.flavor ? s.gold : s.border, border: "none", borderRadius: 8, padding: "10px", color: recipeForm.flavor ? "#0f0e0c" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                style={{ flex: 2, backgroundColor: recipeForm.flavor ? s.gold : s.border, border: "none", borderRadius: 8, padding: "10px", color: recipeForm.flavor ? "#ffffff" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
                 {editingRecipe ? "Сохранить" : "Создать"}
               </button>
               <button onClick={() => setShowRecipeModal(false)}
@@ -2243,7 +2243,7 @@ export default function Dashboard() {
 
             <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
               <button onClick={addOrder} disabled={!addForm.client_name}
-                style={{ flex: 2, backgroundColor: addForm.client_name ? s.gold : s.border, border: "none", borderRadius: 8, padding: "11px", color: addForm.client_name ? "#0f0e0c" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                style={{ flex: 2, backgroundColor: addForm.client_name ? s.gold : s.border, border: "none", borderRadius: 8, padding: "11px", color: addForm.client_name ? "#ffffff" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
                 Добавить заказ
               </button>
               <button onClick={() => { setShowAddModal(false); setAddClientQuery(""); setAddClientSuggestions([]); }}
