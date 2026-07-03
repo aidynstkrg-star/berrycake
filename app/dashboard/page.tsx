@@ -666,10 +666,12 @@ export default function Dashboard() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {!isMobile && lastSync && <span style={{ color: s.muted, fontSize: 12 }}>{lastSync}</span>}
-          <button onClick={syncNow} disabled={syncing}
-            style={{ background: s.gold, border: "none", color: "#ffffff", padding: isMobile ? "6px 12px" : "7px 16px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: isMobile ? 12 : 13, fontWeight: 600, opacity: syncing ? 0.6 : 1 }}>
-            {syncing ? "..." : "Обновить"}
-          </button>
+          {!isMobile && (
+            <button onClick={syncNow} disabled={syncing}
+              style={{ background: s.gold, border: "none", color: "#ffffff", padding: "7px 16px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: 13, fontWeight: 600, opacity: syncing ? 0.6 : 1 }}>
+              {syncing ? "Загрузка..." : "Обновить"}
+            </button>
+          )}
           {!isMobile && <span style={{ color: s.muted, fontSize: 13 }}>{user.name}</span>}
           <button onClick={() => { localStorage.removeItem("bc_auth"); router.replace("/login"); }}
             style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: isMobile ? "6px 10px" : "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: isMobile ? 12 : 13 }}>
