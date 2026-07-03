@@ -66,6 +66,125 @@ export default function Dashboard() {
   const [editingRecipe, setEditingRecipe] = useState<any>(null);
   const [recipeForm, setRecipeForm] = useState<any>({ flavor: "", yield_count: 12, notes: "", ingredients: [] });
   const [showRecipeModal, setShowRecipeModal] = useState(false);
+  const [prodSubTab, setProdSubTab] = useState(0);
+  const [revisions, setRevisions] = useState<any[]>([]);
+  const [showRevisionForm, setShowRevisionForm] = useState(false);
+  const [revisionActuals, setRevisionActuals] = useState<Record<string, string>>({});
+  const [revisionNotes, setRevisionNotes] = useState("");
+  const [savingRevision, setSavingRevision] = useState(false);
+
+  // Unit normalization helpers
+  const toBaseUnit = (amount: number, unit: string): { val: number; base: string } => {
+    const u = (unit || "г").toLowerCase().trim();
+    if (u === "кг") return { val: amount * 1000, base: "г" };
+    if (u === "л") return { val: amount * 1000, base: "мл" };
+    return { val: amount, base: u };
+  };
+
+  const fromBase = (val: number, base: string): string => {
+    if ((base === "г" || base === "мл") && val >= 1000) return `${(val / 1000).toFixed(2)} ${base === "г" ? "кг" : "л"}`;
+    return `${Math.round(val)} ${base}`;
+  };
+
+  const calcExpectedStock = () => {
+    // Gather all unique ingredients from recipes
+    const ingredientKeys: Set<string> = new Set();
+    recipes.forEach((r) => (r.ingredients || []).forEach((ing: any) => { if (ing.name) ingredientKeys.add(ing.name); }));
+
+    const result: Record<string, { base: string; purchased: number; consumed: number; expected: number }> = {};
+
+    // Init
+    ingredientKeys.forEach((key) => {
+      const sampleUnit = (() => {
+        for (const r of recipes) {
+          const ing = (r.ingredients || []).find((i: any) => i.name === key);
+          if (ing?.unit) return toBaseUnit(0, ing.unit).base;
+        }
+        return "г";
+      })();
+      result[key] = { base: sampleUnit, purchased: 0, consumed: 0, expected: 0 };
+    });
+
+    // Purchases: match expense description to ingredient name
+    expenses.forEach((e) => {
+      if (e.category !== "ингредиенты" || !e.quantity_amount) return;
+      const descLower = (e.description || "").toLowerCase();
+      ingredientKeys.forEach((key) => {
+        const keyLower = key.toLowerCase();
+        if (descLower.includes(keyLower) || keyLower.split(" ").some((w: string) => w.length > 3 && descLower.includes(w))) {
+          const { val } = toBaseUnit(parseFloat(e.quantity_amount) || 0, e.unit || "г");
+          result[key].purchased += val;
+        }
+      });
+    });
+
+    // Consumption: production × recipe
+    production.forEach((p) => {
+      const recipe = recipes.find((r) => r.flavor === p.flavor);
+      if (!recipe) return;
+      const batches = (p.quantity || 0) / (recipe.yield_count || 1);
+      (recipe.ingredients || []).forEach((ing: any) => {
+        if (!ing.name || !ing.amount) return;
+        const { val } = toBaseUnit(parseFloat(ing.amount) * batches, ing.unit || "г");
+        if (result[ing.name]) result[ing.name].consumed += val;
+      });
+    });
+
+    // Expected = purchased - consumed
+    Object.keys(result).forEach((k) => { result[k].expected = result[k].purchased - result[k].consumed; });
+    return result;
+  };
+
+  const calcShoppingList = (stock: ReturnType<typeof calcExpectedStock>) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const upcoming = orders.filter((o) => (o.order_date || "") >= today && !["cancelled","delivered"].includes(o.status || ""));
+    const needed: Record<string, { base: string; required: number }> = {};
+
+    upcoming.forEach((o) => {
+      const recipe = recipes.find((r) => r.flavor === o.cake_flavor);
+      if (!recipe) return;
+      const qty = o.quantity || 1;
+      (recipe.ingredients || []).forEach((ing: any) => {
+        if (!ing.name || !ing.amount) return;
+        if (!needed[ing.name]) needed[ing.name] = { base: toBaseUnit(0, ing.unit || "г").base, required: 0 };
+        const { val } = toBaseUnit(parseFloat(ing.amount) * qty, ing.unit || "г");
+        needed[ing.name].required += val;
+      });
+    });
+
+    return Object.entries(needed).map(([name, { base, required }]) => {
+      const have = stock[name]?.expected || 0;
+      const deficit = required - have;
+      return { name, required, have, deficit, base, needToBuy: deficit > 0 };
+    }).filter((i) => i.required > 0).sort((a, b) => (b.needToBuy ? 1 : 0) - (a.needToBuy ? 1 : 0));
+  };
+
+  const fetchRevisions = async () => {
+    const { data } = await supabase.from("berrycake_revisions").select("*").order("revision_date", { ascending: false }).limit(20);
+    if (data) setRevisions(data);
+  };
+
+  const saveRevision = async () => {
+    const stock = calcExpectedStock();
+    setSavingRevision(true);
+    const auth = JSON.parse(localStorage.getItem("bc_auth") || "{}");
+    const items = Object.entries(stock).map(([ingredient, { base, expected }]) => {
+      const actualRaw = parseFloat(revisionActuals[ingredient] || "0");
+      const { val: actualBase } = toBaseUnit(actualRaw, base);
+      return { ingredient, unit: base, expected: Math.round(expected), actual: Math.round(actualBase), diff: Math.round(actualBase - expected) };
+    });
+    await supabase.from("berrycake_revisions").insert({
+      revision_date: new Date().toISOString().slice(0, 10),
+      items,
+      conducted_by: auth.name || "—",
+      notes: revisionNotes || null,
+    });
+    setShowRevisionForm(false);
+    setRevisionActuals({});
+    setRevisionNotes("");
+    setSavingRevision(false);
+    fetchRevisions();
+  };
 
   const fetchClients = async () => {
     const { data } = await supabase.from("berrycake_clients").select("*").order("name");
@@ -253,6 +372,7 @@ export default function Dashboard() {
     fetchUsers();
     fetchRecipes();
     fetchProduction();
+    fetchRevisions();
 
     const channel = supabase.channel("orders_realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "berrycake_orders" }, (payload) => {
@@ -1153,6 +1273,8 @@ export default function Dashboard() {
 
         {/* ── TAB 4: Производство ── */}
         {tab === 4 && (() => {
+          const PROD_SUB_TABS = ["Обзор цеха", "Тех карты", "Ревизия"];
+
           const prevProdMonth = () => {
             const [y, m] = prodMonth.split("-").map(Number);
             const d = new Date(y, m - 2, 1);
@@ -1183,184 +1305,376 @@ export default function Dashboard() {
           });
 
           const byDay: Record<string, number> = {};
-          monthProd.forEach((r) => {
-            byDay[r.bake_date] = (byDay[r.bake_date] || 0) + (r.quantity || 0);
-          });
+          monthProd.forEach((r) => { byDay[r.bake_date] = (byDay[r.bake_date] || 0) + (r.quantity || 0); });
           const dailyProdData = Object.entries(byDay).sort(([a],[b])=>a.localeCompare(b)).map(([date, qty]) => ({ day: date.slice(8), qty }));
 
-          // Cost calculation from expenses
           const calcCost = (recipe: any) => {
             if (!recipe?.ingredients?.length) return null;
             let total = 0;
-            const breakdown: { name: string; amount: number; unit: string; unitCost: number; lineCost: number }[] = [];
             for (const ing of recipe.ingredients) {
-              const matches = expenses.filter((e) =>
-                e.category === "ингредиенты" && e.description?.toLowerCase().includes(ing.name.toLowerCase()) && e.unit && e.quantity_amount
-              );
-              if (matches.length === 0) { breakdown.push({ ...ing, unitCost: 0, lineCost: 0 }); continue; }
+              const matches = expenses.filter((e) => e.category === "ингредиенты" && e.description?.toLowerCase().includes(ing.name.toLowerCase()) && e.unit && e.quantity_amount);
+              if (!matches.length) continue;
               const latest = matches.sort((a: any, b: any) => b.expense_date?.localeCompare(a.expense_date))[0];
-              const unitCost = (latest.amount || 0) / (latest.quantity_amount || 1);
-              const lineCost = unitCost * parseFloat(ing.amount || "0");
-              total += lineCost;
-              breakdown.push({ name: ing.name, amount: ing.amount, unit: ing.unit, unitCost, lineCost });
+              const { val: ingBase } = toBaseUnit(parseFloat(ing.amount || "0"), ing.unit || "г");
+              const { val: expBase } = toBaseUnit(parseFloat(latest.quantity_amount), latest.unit || "г");
+              const unitCost = expBase > 0 ? (latest.amount || 0) / expBase : 0;
+              total += unitCost * ingBase;
             }
-            const perUnit = recipe.yield_count > 0 ? total / recipe.yield_count : total;
-            return { total, perUnit, breakdown };
+            return { total, perUnit: recipe.yield_count > 0 ? total / recipe.yield_count : total };
           };
+
+          // Revision data
+          const stock = calcExpectedStock();
+          const shoppingList = calcShoppingList(stock);
+          const stockEntries = Object.entries(stock);
 
           return (
             <div>
-              {/* Month nav */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 24 }}>
-                <button onClick={prevProdMonth} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 20 }}>‹</button>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ color: s.gold, fontWeight: 700, fontSize: 20, textTransform: "capitalize" }}>{prodMonthLabel}</div>
-                  {isCurrentProdMonth && <div style={{ color: s.muted, fontSize: 11, marginTop: 2 }}>текущий месяц</div>}
-                </div>
-                <button onClick={nextProdMonth} disabled={isCurrentProdMonth}
-                  style={{ background: "none", border: `1px solid ${isCurrentProdMonth ? s.bg : s.border}`, color: isCurrentProdMonth ? s.bg : s.muted, borderRadius: 8, padding: "6px 16px", cursor: isCurrentProdMonth ? "default" : "pointer", fontSize: 20 }}>›</button>
-              </div>
-
-              {/* Stat cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
-                {[
-                  { label: "Выпечено за месяц", val: totalBaked, color: s.gold },
-                  { label: "Годных", val: totalGood, color: "#81c784" },
-                  { label: "Брак", val: totalDefects, color: "#e57373" },
-                  { label: "% брака", val: `${defectRate}%`, color: totalDefects > 0 ? "#ff9800" : s.muted },
-                ].map((st) => (
-                  <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, borderLeft: `3px solid ${st.color}` }}>
-                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label}</div>
-                    <div style={{ color: st.color, fontSize: 26, fontWeight: 700 }}>{st.val}</div>
-                  </div>
+              {/* Sub-tabs */}
+              <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `1px solid ${s.border}`, paddingBottom: 0 }}>
+                {PROD_SUB_TABS.map((t, i) => (
+                  <button key={i} onClick={() => setProdSubTab(i)} style={{
+                    background: "none", border: "none", color: prodSubTab === i ? s.gold : s.muted,
+                    fontWeight: prodSubTab === i ? 700 : 400, fontSize: 14,
+                    padding: "8px 20px", cursor: "pointer",
+                    borderBottom: prodSubTab === i ? `2px solid ${s.gold}` : "2px solid transparent",
+                  }}>{t}</button>
                 ))}
               </div>
 
-              {/* Charts */}
-              {totalBaked > 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 20, marginBottom: 28 }}>
-                  {/* By flavor donut */}
-                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                    <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>По вкусам</h3>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <PieChart width={130} height={130}>
-                        <Pie data={Object.entries(byFlavor).map(([name, v]) => ({ name, value: v.qty }))} cx={60} cy={60} innerRadius={35} outerRadius={58} dataKey="value" strokeWidth={0}>
-                          {Object.keys(byFlavor).map((f, i) => <Cell key={f} fill={PIE_COLORS_PROD[i % PIE_COLORS_PROD.length]} />)}
-                        </Pie>
-                      </PieChart>
-                      <div style={{ flex: 1 }}>
-                        {Object.entries(byFlavor).map(([f, v], i) => (
-                          <div key={f} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
-                            <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: PIE_COLORS_PROD[i % PIE_COLORS_PROD.length], flexShrink: 0 }} />
-                            <div style={{ flex: 1, fontSize: 11, color: s.text }}>{f}</div>
-                            <div style={{ fontSize: 11, color: s.muted, fontWeight: 600 }}>{v.qty}</div>
+              {/* ── SUB 0: Обзор цеха ── */}
+              {prodSubTab === 0 && (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 24 }}>
+                    <button onClick={prevProdMonth} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 20 }}>‹</button>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ color: s.gold, fontWeight: 700, fontSize: 20, textTransform: "capitalize" }}>{prodMonthLabel}</div>
+                      {isCurrentProdMonth && <div style={{ color: s.muted, fontSize: 11, marginTop: 2 }}>текущий месяц</div>}
+                    </div>
+                    <button onClick={nextProdMonth} disabled={isCurrentProdMonth}
+                      style={{ background: "none", border: `1px solid ${isCurrentProdMonth ? s.bg : s.border}`, color: isCurrentProdMonth ? s.bg : s.muted, borderRadius: 8, padding: "6px 16px", cursor: isCurrentProdMonth ? "default" : "pointer", fontSize: 20 }}>›</button>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
+                    {[
+                      { label: "Выпечено за месяц", val: totalBaked, color: s.gold },
+                      { label: "Годных", val: totalGood, color: "#81c784" },
+                      { label: "Брак", val: totalDefects, color: "#e57373" },
+                      { label: "% брака", val: `${defectRate}%`, color: totalDefects > 0 ? "#ff9800" : s.muted },
+                    ].map((st) => (
+                      <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, borderLeft: `3px solid ${st.color}` }}>
+                        <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label}</div>
+                        <div style={{ color: st.color, fontSize: 26, fontWeight: 700 }}>{st.val}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {totalBaked > 0 && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 20, marginBottom: 28 }}>
+                      <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                        <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>По вкусам</h3>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <PieChart width={130} height={130}>
+                            <Pie data={Object.entries(byFlavor).map(([name, v]) => ({ name, value: v.qty }))} cx={60} cy={60} innerRadius={35} outerRadius={58} dataKey="value" strokeWidth={0}>
+                              {Object.keys(byFlavor).map((f, i) => <Cell key={f} fill={PIE_COLORS_PROD[i % PIE_COLORS_PROD.length]} />)}
+                            </Pie>
+                          </PieChart>
+                          <div style={{ flex: 1 }}>
+                            {Object.entries(byFlavor).map(([f, v], i) => (
+                              <div key={f} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: PIE_COLORS_PROD[i % PIE_COLORS_PROD.length], flexShrink: 0 }} />
+                                <div style={{ flex: 1, fontSize: 11, color: s.text }}>{f}</div>
+                                <div style={{ fontSize: 11, color: s.muted, fontWeight: 600 }}>{v.qty} шт</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                        <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Выпечка по дням</h3>
+                        <ResponsiveContainer width="100%" height={130}>
+                          <BarChart data={dailyProdData}>
+                            <XAxis dataKey="day" stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} />
+                            <YAxis stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} />
+                            <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} formatter={(v: any) => [`${v} шт`, "Выпечено"]} />
+                            <Bar dataKey="qty" fill={s.gold} radius={[3,3,0,0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {isCurrentProdMonth && todayProd.length > 0 && (
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
+                      <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Цех сегодня</h3>
+                      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        {todayProd.map((r) => (
+                          <div key={r.id} style={{ backgroundColor: s.bg, borderRadius: 10, padding: "12px 16px", minWidth: 120, borderLeft: `3px solid ${FLAVOR_COLORS[r.flavor] || s.gold}` }}>
+                            <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 13 }}>{r.flavor}</div>
+                            <div style={{ color: s.text, fontSize: 20, fontWeight: 700, marginTop: 4 }}>{r.quantity} шт</div>
+                            {r.defects > 0 && <div style={{ color: "#e57373", fontSize: 12, marginTop: 2 }}>брак: {r.defects}</div>}
+                            {r.notes && <div style={{ color: s.muted, fontSize: 11, marginTop: 4 }}>{r.notes}</div>}
                           </div>
                         ))}
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Daily chart */}
-                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
-                    <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Выпечка по дням</h3>
-                    <ResponsiveContainer width="100%" height={130}>
-                      <BarChart data={dailyProdData}>
-                        <XAxis dataKey="day" stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} />
-                        <YAxis stroke={s.muted} tick={{ fill: s.muted, fontSize: 10 }} />
-                        <Tooltip contentStyle={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8 }} formatter={(v: any) => [`${v} шт`, "Выпечено"]} />
-                        <Bar dataKey="qty" fill={s.gold} radius={[3,3,0,0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                  {totalBaked === 0 && (
+                    <div style={{ textAlign: "center", color: s.muted, fontSize: 13, padding: "60px 0" }}>Нет данных о выпечке за {prodMonthLabel}.</div>
+                  )}
+                </>
               )}
 
-              {/* Today's production log */}
-              {isCurrentProdMonth && todayProd.length > 0 && (
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 28 }}>
-                  <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Цех сегодня</h3>
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    {todayProd.map((r) => (
-                      <div key={r.id} style={{ backgroundColor: s.bg, borderRadius: 10, padding: "12px 16px", minWidth: 120, borderLeft: `3px solid ${FLAVOR_COLORS[r.flavor] || s.gold}` }}>
-                        <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 13 }}>{r.flavor}</div>
-                        <div style={{ color: s.text, fontSize: 20, fontWeight: 700, marginTop: 4 }}>{r.quantity} шт</div>
-                        {r.defects > 0 && <div style={{ color: "#e57373", fontSize: 12, marginTop: 2 }}>брак: {r.defects}</div>}
-                        {r.notes && <div style={{ color: s.muted, fontSize: 11, marginTop: 4 }}>{r.notes}</div>}
-                      </div>
-                    ))}
+              {/* ── SUB 1: Тех карты ── */}
+              {prodSubTab === 1 && (
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                    <h3 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Технические карты</h3>
+                    <button onClick={() => { setEditingRecipe(null); setRecipeForm({ flavor: "", yield_count: 12, notes: "", ingredients: [] }); setShowRecipeModal(true); }}
+                      style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "7px 16px", color: "#0f0e0c", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                      + Добавить
+                    </button>
                   </div>
-                </div>
-              )}
-
-              {/* Tech cards */}
-              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                  <h3 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Технические карты</h3>
-                  <button onClick={() => { setEditingRecipe(null); setRecipeForm({ flavor: "", yield_count: 12, notes: "", ingredients: [] }); setShowRecipeModal(true); }}
-                    style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "7px 16px", color: "#0f0e0c", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    + Добавить
-                  </button>
-                </div>
-
-                {recipes.length === 0
-                  ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>Тех карты не заполнены. Добавьте рецепт для каждого вкуса.</div>
-                  : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-                      {recipes.map((r) => {
-                        const cost = calcCost(r);
-                        const clientPrice = clients.length > 0 ? clients.filter((c: any) => c.price_per_unit).map((c: any) => c.price_per_unit).reduce((a: number, b: number) => a + b, 0) / clients.filter((c: any) => c.price_per_unit).length : 0;
-                        return (
-                          <div key={r.id} style={{ backgroundColor: s.bg, borderRadius: 12, padding: 16, border: `1px solid ${s.border}` }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                              <div>
-                                <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 15 }}>{r.flavor}</div>
-                                <div style={{ color: s.muted, fontSize: 12, marginTop: 2 }}>Выход: {r.yield_count} шт с замеса</div>
+                  {recipes.length === 0
+                    ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>Тех карты не заполнены.</div>
+                    : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+                        {recipes.map((r) => {
+                          const cost = calcCost(r);
+                          const priceArr = clients.filter((c: any) => c.price_per_unit).map((c: any) => Number(c.price_per_unit));
+                          const avgPrice = priceArr.length > 0 ? priceArr.reduce((a, b) => a + b, 0) / priceArr.length : 0;
+                          return (
+                            <div key={r.id} style={{ backgroundColor: s.bg, borderRadius: 12, padding: 16, border: `1px solid ${s.border}` }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                                <div>
+                                  <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 15 }}>{r.flavor}</div>
+                                  <div style={{ color: s.muted, fontSize: 12, marginTop: 2 }}>Выход: {r.yield_count} шт с замеса</div>
+                                </div>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  <button onClick={() => openEditRecipe(r)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✏️</button>
+                                  <button onClick={() => deleteRecipe(r.id)} style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                                </div>
                               </div>
-                              <div style={{ display: "flex", gap: 6 }}>
-                                <button onClick={() => openEditRecipe(r)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✏️</button>
-                                <button onClick={() => deleteRecipe(r.id)} style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                              {(r.ingredients || []).length > 0 && (
+                                <div style={{ marginBottom: 12 }}>
+                                  {(r.ingredients || []).map((ing: any, i: number) => (
+                                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderBottom: `1px solid ${s.border}` }}>
+                                      <span style={{ color: s.text }}>{ing.name}</span>
+                                      <span style={{ color: s.muted }}>{ing.amount} {ing.unit}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {cost && cost.perUnit > 0 ? (
+                                <div style={{ backgroundColor: s.card, borderRadius: 8, padding: "10px 12px", display: "flex", justifyContent: "space-between" }}>
+                                  <div>
+                                    <div style={{ color: s.muted, fontSize: 11 }}>Себестоимость / шт</div>
+                                    <div style={{ color: "#e57373", fontWeight: 700, fontSize: 16 }}>{Math.round(cost.perUnit).toLocaleString("ru-RU")} ₸</div>
+                                  </div>
+                                  {avgPrice > 0 && (
+                                    <div style={{ textAlign: "right" }}>
+                                      <div style={{ color: s.muted, fontSize: 11 }}>Маржа (сред.)</div>
+                                      <div style={{ color: "#81c784", fontWeight: 700, fontSize: 16 }}>+{Math.round(avgPrice - cost.perUnit).toLocaleString("ru-RU")} ₸</div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div style={{ color: s.muted, fontSize: 11, textAlign: "center", padding: "8px 0" }}>Добавьте расходы по ингредиентам для расчёта себестоимости</div>
+                              )}
+                              {r.notes && <div style={{ color: s.muted, fontSize: 12, marginTop: 10, fontStyle: "italic" }}>{r.notes}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                  }
+                </div>
+              )}
+
+              {/* ── SUB 2: Ревизия ── */}
+              {prodSubTab === 2 && (
+                <div>
+                  {/* Header */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                    <div>
+                      <h2 style={{ color: s.gold, fontSize: 16, margin: 0 }}>Ревизия склада</h2>
+                      <div style={{ color: s.muted, fontSize: 12, marginTop: 4 }}>Расчётный остаток vs фактический</div>
+                    </div>
+                    <button onClick={() => { setShowRevisionForm(true); setRevisionActuals({}); }}
+                      style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "9px 20px", color: "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                      + Провести ревизию
+                    </button>
+                  </div>
+
+                  {/* Current expected stock */}
+                  {stockEntries.length > 0 && (
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
+                      <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>Расчётные остатки (на основе закупок и производства)</h3>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                            {["Ингредиент","Закуплено","Израсходовано","Расчётный остаток"].map((h) => (
+                              <th key={h} style={{ padding: "8px 12px", textAlign: "left", color: s.muted, fontWeight: 600, fontSize: 12 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stockEntries.map(([name, { base, purchased, consumed, expected }]) => (
+                            <tr key={name} style={{ borderBottom: `1px solid ${s.border}` }}>
+                              <td style={{ padding: "10px 12px", fontWeight: 600 }}>{name}</td>
+                              <td style={{ padding: "10px 12px", color: "#81c784" }}>{fromBase(purchased, base)}</td>
+                              <td style={{ padding: "10px 12px", color: "#e57373" }}>{fromBase(consumed, base)}</td>
+                              <td style={{ padding: "10px 12px" }}>
+                                <span style={{ color: expected >= 0 ? s.gold : "#e57373", fontWeight: 700 }}>
+                                  {fromBase(Math.abs(expected), base)}{expected < 0 ? " ⚠️" : ""}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Shopping list */}
+                  {shoppingList.length > 0 && (
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
+                      <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 4 }}>Список на закупку</h3>
+                      <div style={{ color: s.muted, fontSize: 12, marginBottom: 16 }}>На основе предстоящих заказов</div>
+                      {shoppingList.map((item) => (
+                        <div key={item.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${s.border}` }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 16 }}>{item.needToBuy ? "🔴" : "🟢"}</span>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{item.name}</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 24, fontSize: 12 }}>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ color: s.muted }}>Нужно</div>
+                              <div style={{ color: s.text, fontWeight: 600 }}>{fromBase(item.required, item.base)}</div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ color: s.muted }}>Есть</div>
+                              <div style={{ color: item.have > 0 ? "#81c784" : s.muted, fontWeight: 600 }}>{fromBase(Math.max(0, item.have), item.base)}</div>
+                            </div>
+                            {item.needToBuy && (
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ color: s.muted }}>Докупить</div>
+                                <div style={{ color: "#e57373", fontWeight: 700 }}>{fromBase(item.deficit, item.base)}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Revision history */}
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                    <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>История ревизий</h3>
+                    {revisions.length === 0
+                      ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>Ревизии ещё не проводились</div>
+                      : revisions.map((rev) => (
+                          <div key={rev.id} style={{ backgroundColor: s.bg, borderRadius: 10, padding: 16, marginBottom: 12, border: `1px solid ${s.border}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                              <div>
+                                <div style={{ color: s.gold, fontWeight: 700, fontSize: 14 }}>{rev.revision_date}</div>
+                                <div style={{ color: s.muted, fontSize: 12 }}>Провёл: {rev.conducted_by}</div>
+                              </div>
+                              <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
+                                <span style={{ color: "#e57373" }}>
+                                  Недостач: {(rev.items || []).filter((i: any) => i.diff < 0).length}
+                                </span>
+                                <span style={{ color: "#81c784" }}>
+                                  Излишков: {(rev.items || []).filter((i: any) => i.diff > 0).length}
+                                </span>
                               </div>
                             </div>
-
-                            {/* Ingredients */}
-                            {(r.ingredients || []).length > 0 && (
-                              <div style={{ marginBottom: 12 }}>
-                                {(r.ingredients || []).map((ing: any, i: number) => (
-                                  <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${s.border}` }}>
-                                    <span style={{ color: s.text }}>{ing.name}</span>
-                                    <span style={{ color: s.muted }}>{ing.amount} {ing.unit}</span>
-                                  </div>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                              <thead>
+                                <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                                  {["Ингредиент","Расчётно","Факт","Расхождение"].map((h) => (
+                                    <th key={h} style={{ padding: "5px 8px", textAlign: "left", color: s.muted, fontWeight: 600 }}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(rev.items || []).map((item: any, i: number) => (
+                                  <tr key={i} style={{ borderBottom: `1px solid ${s.border}` }}>
+                                    <td style={{ padding: "6px 8px" }}>{item.ingredient}</td>
+                                    <td style={{ padding: "6px 8px", color: s.muted }}>{fromBase(item.expected, item.unit)}</td>
+                                    <td style={{ padding: "6px 8px" }}>{fromBase(item.actual, item.unit)}</td>
+                                    <td style={{ padding: "6px 8px" }}>
+                                      <span style={{ color: item.diff === 0 ? s.muted : item.diff > 0 ? "#81c784" : "#e57373", fontWeight: 700 }}>
+                                        {item.diff > 0 ? "+" : ""}{fromBase(item.diff, item.unit)}
+                                        {Math.abs(item.diff) > item.expected * 0.1 && item.diff < 0 ? " ⚠️" : ""}
+                                      </span>
+                                    </td>
+                                  </tr>
                                 ))}
-                              </div>
-                            )}
-
-                            {/* Cost */}
-                            {cost && cost.perUnit > 0 && (
-                              <div style={{ backgroundColor: s.card, borderRadius: 8, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div>
-                                  <div style={{ color: s.muted, fontSize: 11 }}>Себестоимость / шт</div>
-                                  <div style={{ color: "#e57373", fontWeight: 700, fontSize: 16 }}>{Math.round(cost.perUnit).toLocaleString("ru-RU")} ₸</div>
-                                </div>
-                                {clientPrice > 0 && (
-                                  <div style={{ textAlign: "right" }}>
-                                    <div style={{ color: s.muted, fontSize: 11 }}>Маржа (сред.)</div>
-                                    <div style={{ color: "#81c784", fontWeight: 700, fontSize: 16 }}>+{Math.round(clientPrice - cost.perUnit).toLocaleString("ru-RU")} ₸</div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            {cost && cost.perUnit === 0 && (
-                              <div style={{ color: s.muted, fontSize: 11, textAlign: "center", padding: "8px 0" }}>
-                                Добавьте расходы с ингредиентами для расчёта себестоимости
-                              </div>
-                            )}
-
-                            {r.notes && <div style={{ color: s.muted, fontSize: 12, marginTop: 10, fontStyle: "italic" }}>{r.notes}</div>}
+                              </tbody>
+                            </table>
+                            {rev.notes && <div style={{ color: s.muted, fontSize: 12, marginTop: 10, fontStyle: "italic" }}>{rev.notes}</div>}
                           </div>
-                        );
-                      })}
+                        ))
+                    }
+                  </div>
+
+                  {/* Revision form modal */}
+                  {showRevisionForm && (
+                    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 }}>
+                      <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto" }}>
+                        <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 6 }}>Ревизия склада</h2>
+                        <p style={{ color: s.muted, fontSize: 13, marginBottom: 20 }}>Введите фактическое количество каждого ингредиента</p>
+
+                        {stockEntries.length === 0
+                          ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Нет ингредиентов в тех картах</div>
+                          : stockEntries.map(([name, { base, expected }]) => (
+                              <div key={name} style={{ marginBottom: 14 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                  <label style={{ color: s.text, fontSize: 13, fontWeight: 600 }}>{name}</label>
+                                  <span style={{ color: s.muted, fontSize: 12 }}>расчётно: {fromBase(Math.max(0, expected), base)}</span>
+                                </div>
+                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                  <input
+                                    type="number" min="0" placeholder="0"
+                                    value={revisionActuals[name] || ""}
+                                    onChange={(e) => setRevisionActuals((prev) => ({ ...prev, [name]: e.target.value }))}
+                                    style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${revisionActuals[name] ? s.gold : s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 14, outline: "none" }}
+                                  />
+                                  <span style={{ color: s.muted, fontSize: 13, minWidth: 30 }}>{base}</span>
+                                  {revisionActuals[name] && (
+                                    <span style={{
+                                      fontSize: 12, fontWeight: 700, minWidth: 60, textAlign: "right",
+                                      color: parseFloat(revisionActuals[name]) >= expected * 0.9 ? "#81c784" : "#e57373"
+                                    }}>
+                                      {parseFloat(revisionActuals[name]) >= expected ? "✓" : `−${fromBase(expected - parseFloat(revisionActuals[name]), base)}`}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                        }
+
+                        <div style={{ marginTop: 16, marginBottom: 20 }}>
+                          <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Заметки</label>
+                          <textarea value={revisionNotes} onChange={(e) => setRevisionNotes(e.target.value)} rows={2} placeholder="Причины расхождений, замечания..."
+                            style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", resize: "none", boxSizing: "border-box" }} />
+                        </div>
+
+                        <div style={{ display: "flex", gap: 12 }}>
+                          <button onClick={saveRevision} disabled={savingRevision || stockEntries.length === 0}
+                            style={{ flex: 2, backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "11px", color: "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                            {savingRevision ? "Сохранение..." : "Сохранить ревизию"}
+                          </button>
+                          <button onClick={() => setShowRevisionForm(false)}
+                            style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "11px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
+                            Отмена
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                }
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })()}
