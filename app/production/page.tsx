@@ -9,6 +9,19 @@ const supabase = createClient(
 );
 
 const s = { bg: "#ffffff", card: "#f7f7f5", gold: "#1a1a1a", text: "#111111", muted: "#999999", border: "#e8e8e8" };
+
+const WORK_LAT = 47.907002;
+const WORK_LON = 67.525650;
+const MAX_RADIUS_M = 20;
+
+function calcDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
 const FLAVORS = ["ВУПИ", "МОЛОЧКА", "ЯГОДНЫЙ", "НУТЕЛЛА", "СНИКЕРС", "СГУЩЕНКА ОРЕХ"];
 const FLAVOR_COLORS: Record<string, string> = {
   "ВУПИ": "#f06292", "МОЛОЧКА": "#64b5f6", "ЯГОДНЫЙ": "#81c784",
@@ -27,13 +40,61 @@ export default function ProductionPage() {
   const [saved, setSaved] = useState(false);
   const [todayLog, setTodayLog] = useState<any[]>([]);
   const [loadingLog, setLoadingLog] = useState(true);
+  const [todayAttendance, setTodayAttendance] = useState<any[]>([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [geoError, setGeoError] = useState("");
 
   useEffect(() => {
     const auth = localStorage.getItem("bc_auth");
     if (!auth) { router.replace("/login"); return; }
-    setUser(JSON.parse(auth));
+    const parsed = JSON.parse(auth);
+    setUser(parsed);
     fetchTodayLog();
+    loadAttendance(parsed.name);
   }, []);
+
+  const loadAttendance = async (name: string) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data } = await supabase.from("berrycake_attendance")
+      .select("*").eq("employee_name", name)
+      .gte("created_at", today + "T00:00:00Z").order("created_at");
+    if (data) setTodayAttendance(data);
+  };
+
+  const markAttendance = (type: "checkin" | "checkout") => {
+    setGeoError("");
+    setAttendanceLoading(true);
+    if (!navigator.geolocation) {
+      setGeoError("Геолокация не поддерживается браузером");
+      setAttendanceLoading(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const dist = calcDistance(pos.coords.latitude, pos.coords.longitude, WORK_LAT, WORK_LON);
+        if (dist > MAX_RADIUS_M) {
+          setGeoError(`Вы в ${Math.round(dist)} м от рабочего места. Нужно быть в радиусе ${MAX_RADIUS_M} м.`);
+          setAttendanceLoading(false);
+          return;
+        }
+        const auth = JSON.parse(localStorage.getItem("bc_auth") || "{}");
+        await supabase.from("berrycake_attendance").insert({
+          employee_name: auth.name,
+          type,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          distance_m: Math.round(dist),
+        });
+        await loadAttendance(auth.name);
+        setAttendanceLoading(false);
+      },
+      () => {
+        setGeoError("Не удалось получить геолокацию. Разрешите доступ в браузере.");
+        setAttendanceLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const fetchTodayLog = async () => {
     setLoadingLog(true);
@@ -95,6 +156,33 @@ export default function ProductionPage() {
           </button>
         </div>
       </div>
+
+      {/* Attendance bar */}
+      {(() => {
+        const checkedIn = todayAttendance.find((a) => a.type === "checkin");
+        const checkedOut = todayAttendance.find((a) => a.type === "checkout");
+        const fmt = (iso: string) => new Date(iso).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+        return (
+          <div style={{ backgroundColor: s.card, borderBottom: `1px solid ${s.border}`, padding: "10px 24px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: s.muted, fontWeight: 500 }}>Смена:</span>
+            {checkedIn
+              ? <span style={{ fontSize: 13, color: "#22c55e", fontWeight: 600 }}>Приход {fmt(checkedIn.created_at)}</span>
+              : <button onClick={() => markAttendance("checkin")} disabled={attendanceLoading}
+                  style={{ backgroundColor: "#22c55e", color: "#fff", border: "none", borderRadius: 8, padding: "6px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                  {attendanceLoading ? "..." : "Отметить приход"}
+                </button>
+            }
+            {checkedIn && !checkedOut && (
+              <button onClick={() => markAttendance("checkout")} disabled={attendanceLoading}
+                style={{ backgroundColor: "#ef4444", color: "#fff", border: "none", borderRadius: 8, padding: "6px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                {attendanceLoading ? "..." : "Отметить уход"}
+              </button>
+            )}
+            {checkedOut && <span style={{ fontSize: 13, color: "#ef4444", fontWeight: 600 }}>Уход {fmt(checkedOut.created_at)}</span>}
+            {geoError && <span style={{ fontSize: 12, color: "#ef4444", flex: 1 }}>⚠️ {geoError}</span>}
+          </div>
+        );
+      })()}
 
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "32px 16px" }}>
 
