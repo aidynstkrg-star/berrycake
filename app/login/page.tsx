@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-const s = { bg: "#ffffff", card: "#f7f7f5", gold: "#1a1a1a", text: "#111111", muted: "#999999", border: "#e8e8e8" };
+const s = { bg: "#f5f5f3", card: "#ffffff", gold: "#111827", text: "#111827", muted: "#6b7280", border: "#e5e7eb" };
 
 const SECTIONS = [
   { key: "cashier",    label: "КАССА",       icon: "🧾", digits: 4, hint: "Менеджер цеха" },
@@ -83,7 +83,7 @@ export default function LoginPage() {
   // Welcome screen
   if (welcome) {
     return (
-      <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "sans-serif" }}>
+      <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, sans-serif" }}>
         <div style={{ textAlign: "center", animation: "fadeIn 0.4s ease" }}>
           <div style={{ fontSize: 64, marginBottom: 16 }}>👋</div>
           <h2 style={{ color: s.gold, fontSize: 26, fontWeight: 700, marginBottom: 8 }}>Добро пожаловать,</h2>
@@ -97,7 +97,7 @@ export default function LoginPage() {
   // Section select
   if (!section) {
     return (
-      <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "sans-serif", padding: 24 }}>
+      <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, sans-serif", padding: 24 }}>
         <div style={{ fontSize: 44, marginBottom: 10 }}>🍰</div>
         <h1 style={{ color: s.gold, fontSize: 22, fontWeight: 700, marginBottom: 4 }}>BerryCake</h1>
         <p style={{ color: s.muted, fontSize: 14, marginBottom: 48 }}>Выберите раздел для входа</p>
@@ -107,7 +107,7 @@ export default function LoginPage() {
             <button key={sec.key} onClick={() => selectSection(sec)}
               style={{
                 flex: "1 1 140px", maxWidth: 180,
-                backgroundColor: s.card, border: `2px solid ${s.border}`,
+                backgroundColor: s.card, boxShadow: "0 2px 8px rgba(0,0,0,0.08)", border: "1px solid #f0f0ee",
                 borderRadius: 20, padding: "36px 20px", cursor: "pointer",
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
                 transition: "all 0.15s",
@@ -125,7 +125,7 @@ export default function LoginPage() {
 
   // PIN entry
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "sans-serif" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, sans-serif" }}>
       <button onClick={() => { setSection(null); setPin([]); setError(""); }}
         style={{ position: "absolute", top: 24, left: 24, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>
         ← Назад

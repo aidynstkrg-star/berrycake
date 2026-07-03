@@ -639,28 +639,29 @@ export default function Dashboard() {
 
   if (!user) return null;
 
-  const s = { bg: "#ffffff", card: "#f7f7f5", gold: "#1a1a1a", text: "#111111", muted: "#999999", border: "#e8e8e8" };
+  const s = { bg: "#f5f5f3", card: "#ffffff", gold: "#111827", text: "#111827", muted: "#6b7280", border: "#e5e7eb", sh: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)" };
+  const font = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 
   return (
-    <div style={{ backgroundColor: s.bg, minHeight: "100vh", color: s.text, fontFamily: "sans-serif" }}>
+    <div style={{ backgroundColor: s.bg, minHeight: "100vh", color: s.text, fontFamily: font }}>
       {/* Notification */}
       {notification && (
-        <div style={{ position: "fixed", top: 16, right: 16, backgroundColor: "#1a1815", border: `1px solid ${s.gold}`, borderRadius: 10, padding: "12px 20px", zIndex: 1000, color: s.text, fontSize: 14 }}>
+        <div style={{ position: "fixed", top: 16, right: 16, backgroundColor: s.card, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", borderRadius: 10, padding: "12px 20px", zIndex: 1000, color: s.text, fontSize: 14, border: `1px solid ${s.border}` }}>
           {notification}
         </div>
       )}
 
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${s.border}`, padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 24 }}>🍰</span>
-          <span style={{ color: s.gold, fontWeight: 700, fontSize: 18 }}>BerryCake Analytics</span>
+      <div style={{ backgroundColor: s.card, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", padding: "14px 28px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 22 }}>🍰</span>
+          <span style={{ color: s.gold, fontWeight: 700, fontSize: 17, letterSpacing: "-0.3px" }}>BerryCake</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {lastSync && <span style={{ color: s.muted, fontSize: 12 }}>{lastSync}</span>}
           <button onClick={syncNow} disabled={syncing}
-            style={{ background: syncing ? "#2a2825" : s.gold, border: "none", color: syncing ? s.muted : "#ffffff", padding: "6px 14px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: 13, fontWeight: 600 }}>
-            {syncing ? "Синхронизация..." : "Обновить"}
+            style={{ background: s.gold, border: "none", color: "#ffffff", padding: "7px 16px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: 13, fontWeight: 600, opacity: syncing ? 0.6 : 1 }}>
+            {syncing ? "Загрузка..." : "Обновить"}
           </button>
           <span style={{ color: s.muted, fontSize: 13 }}>{user.name}</span>
           <button onClick={() => { localStorage.removeItem("bc_auth"); router.replace("/login"); }}
@@ -671,16 +672,17 @@ export default function Dashboard() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, padding: "16px 24px 0", borderBottom: `1px solid ${s.border}` }}>
+      <div style={{ backgroundColor: s.card, display: "flex", gap: 0, padding: "0 28px", borderBottom: `1px solid ${s.border}` }}>
         {TABS.map((t, i) => (
           <button key={i} onClick={() => setTab(i)} style={{
-            background: "none", border: "none", color: tab === i ? s.gold : s.muted, fontWeight: tab === i ? 700 : 400,
-            fontSize: 14, padding: "8px 16px", cursor: "pointer", borderBottom: tab === i ? `2px solid ${s.gold}` : "2px solid transparent",
+            background: "none", border: "none", color: tab === i ? s.gold : s.muted, fontWeight: tab === i ? 600 : 400,
+            fontSize: 13, padding: "12px 16px", cursor: "pointer", borderBottom: tab === i ? `2px solid ${s.gold}` : "2px solid transparent",
+            transition: "color 0.15s", whiteSpace: "nowrap",
           }}>{t}</button>
         ))}
       </div>
 
-      <div style={{ padding: 24 }}>
+      <div style={{ padding: "24px 28px" }}>
         {/* ── TAB 0: Обзор ── */}
         {tab === 0 && (() => {
           const prevMonth = () => {
@@ -745,14 +747,14 @@ export default function Dashboard() {
                   ["Заказов сегодня", todayStats.orders],
                   ["Тортов сегодня", todayStats.cakes],
                 ].map(([label, val]) => (
-                  <div key={label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, borderLeft: `3px solid ${s.gold}` }}>
+                  <div key={label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh, borderLeft: "3px solid #111827" }}>
                     <div style={{ color: s.muted, fontSize: 12, marginBottom: 8 }}>{label}</div>
                     <div style={{ color: s.gold, fontSize: 32, fontWeight: 700 }}>{val}</div>
                   </div>
                 ))}
               </div>
 
-              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 32 }}>
+              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24, boxShadow: s.sh }}>
                 <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Заказы по дням — {monthLabel}</h2>
                 {mDaily.length === 0
                   ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "40px 0" }}>Нет заказов в этом месяце</div>
@@ -769,7 +771,7 @@ export default function Dashboard() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                   <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Топ вкусов — {monthLabel}</h2>
                   {mFlavors.length === 0
                     ? <div style={{ color: s.muted, fontSize: 13 }}>Нет данных</div>
@@ -787,7 +789,7 @@ export default function Dashboard() {
                   }
                 </div>
 
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                   <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Заказы месяца</h2>
                   <div style={{ overflowY: "auto", maxHeight: 280 }}>
                     {mOrders.length === 0
@@ -909,7 +911,7 @@ export default function Dashboard() {
                 { label: "Консигнация", val: clients.filter((c) => c.client_type === "консигнация").length },
                 { label: "Общий долг", val: totalDebt > 0 ? `${totalDebt.toLocaleString()} ₸` : "0 ₸" },
               ].map((st) => (
-                <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                   <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label}</div>
                   <div style={{ color: s.gold, fontSize: 22, fontWeight: 700 }}>{st.val}</div>
                 </div>
@@ -917,7 +919,7 @@ export default function Dashboard() {
             </div>
 
             {/* Table */}
-            <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+            <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <h2 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Клиенты и ставки</h2>
                 <button onClick={() => { setEditingClient(null); setClientForm({ name: "", phone: "", price_per_unit: "", client_type: "розница", notes: "" }); setShowClientModal(true); }}
@@ -1079,7 +1081,7 @@ export default function Dashboard() {
               {monthTotal > 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 20, marginBottom: 24 }}>
                   {/* Donut chart */}
-                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                     <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>По категориям</h3>
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                       <PieChart width={140} height={140}>
@@ -1100,7 +1102,7 @@ export default function Dashboard() {
                   </div>
 
                   {/* Daily bar chart */}
-                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                     <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Расходы по дням</h3>
                     {dailyData.length > 0
                       ? <ResponsiveContainer width="100%" height={130}>
@@ -1461,7 +1463,7 @@ export default function Dashboard() {
 
                   {totalBaked > 0 && (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 20, marginBottom: 28 }}>
-                      <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                      <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                         <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>По вкусам</h3>
                         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                           <PieChart width={130} height={130}>
@@ -1480,7 +1482,7 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-                      <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                      <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                         <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>Выпечка по дням</h3>
                         <ResponsiveContainer width="100%" height={130}>
                           <BarChart data={dailyProdData}>
@@ -1518,7 +1520,7 @@ export default function Dashboard() {
 
               {/* ── SUB 1: Тех карты ── */}
               {prodSubTab === 1 && (
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                     <h3 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Технические карты</h3>
                     <button onClick={() => { setEditingRecipe(null); setRecipeForm({ flavor: "", yield_count: 12, notes: "", ingredients: [] }); setShowRecipeModal(true); }}
@@ -1761,7 +1763,7 @@ export default function Dashboard() {
                   )}
 
                   {/* Revision history */}
-                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20 }}>
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                     <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>История ревизий</h3>
                     {revisions.length === 0
                       ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "24px 0" }}>Ревизии ещё не проводились</div>

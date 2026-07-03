@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-const s = { bg: "#ffffff", card: "#f7f7f5", gold: "#1a1a1a", text: "#111111", muted: "#999999", border: "#e8e8e8" };
+const s = { bg: "#f5f5f3", card: "#ffffff", gold: "#111827", text: "#111827", muted: "#6b7280", border: "#e5e7eb" };
 const FLAVORS = ["ВУПИ", "МОЛОЧКА", "ЯГОДНЫЙ", "НУТЕЛЛА", "СНИКЕРС", "СГУЩЕНКА ОРЕХ"];
 const FLAVOR_COLORS: Record<string, string> = {
   "ВУПИ": "#f06292", "МОЛОЧКА": "#64b5f6", "ЯГОДНЫЙ": "#81c784",
@@ -80,9 +80,9 @@ export default function ProductionPage() {
   if (!user) return null;
 
   return (
-    <div style={{ backgroundColor: s.bg, minHeight: "100vh", color: s.text, fontFamily: "sans-serif" }}>
+    <div style={{ backgroundColor: s.bg, minHeight: "100vh", color: s.text, fontFamily: "'Inter', -apple-system, sans-serif" }}>
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${s.border}`, padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ backgroundColor: s.card, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 24 }}>🏭</span>
           <span style={{ color: s.gold, fontWeight: 700, fontSize: 18 }}>BerryCake — Цех</span>
