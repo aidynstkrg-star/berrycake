@@ -913,102 +913,138 @@ export default function Dashboard() {
           return (
           <>
             {/* Summary */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3,1fr)", gap: isMobile ? 10 : 16, marginBottom: 24 }}>
               {[
                 { label: "Клиентов", val: clients.length },
                 { label: "Консигнация", val: clients.filter((c) => c.client_type === "консигнация").length },
                 { label: "Общий долг", val: totalDebt > 0 ? `${totalDebt.toLocaleString()} ₸` : "0 ₸" },
               ].map((st) => (
-                <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
+                <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? "14px 12px" : 20, boxShadow: s.sh }}>
                   <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label}</div>
-                  <div style={{ color: s.gold, fontSize: 22, fontWeight: 700 }}>{st.val}</div>
+                  <div style={{ color: s.gold, fontSize: isMobile ? 18 : 22, fontWeight: 700 }}>{st.val}</div>
                 </div>
               ))}
             </div>
 
-            {/* Table */}
-            <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <h2 style={{ color: s.gold, fontSize: 15, margin: 0 }}>Клиенты и ставки</h2>
-                <button onClick={() => { setEditingClient(null); setClientForm({ name: "", phone: "", price_per_unit: "", client_type: "розница", notes: "" }); setShowClientModal(true); }}
-                  style={{ background: s.gold, border: "none", color: "#ffffff", padding: "7px 16px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
-                  + Добавить клиента
-                </button>
+            {/* Add button */}
+            <button onClick={() => { setEditingClient(null); setClientForm({ name: "", phone: "", price_per_unit: "", client_type: "розница", notes: "" }); setShowClientModal(true); }}
+              style={{ display: "block", width: isMobile ? "100%" : "auto", background: s.gold, border: "none", color: "#ffffff", padding: isMobile ? "14px" : "8px 18px", borderRadius: 10, cursor: "pointer", fontSize: isMobile ? 15 : 13, fontWeight: 700, marginBottom: 16 }}>
+              + Добавить клиента
+            </button>
+
+            {/* Clients list */}
+            {isMobile ? (
+              <div>
+                {clients.length === 0 && (
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 32, textAlign: "center", color: s.muted, fontSize: 13 }}>Нет клиентов. Нажмите кнопку выше.</div>
+                )}
+                {clients.map((c) => {
+                  const clientOrders = orders.filter((o) => o.client_name === c.name || (c.phone && o.phone === c.phone));
+                  const debt = clientOrders.reduce((sum, o) => sum + ((o.total_amount || 0) - (o.paid_amount || 0)), 0);
+                  const typeColor = c.client_type === "консигнация" ? "#a78bfa" : c.client_type === "опт" ? s.gold : s.muted;
+                  const typeBg = c.client_type === "консигнация" ? "#7c3aed15" : c.client_type === "опт" ? "#c8a96e15" : "#f0f0ee";
+                  return (
+                    <div key={c.id} style={{ backgroundColor: s.card, borderRadius: 12, padding: "16px", marginBottom: 10, boxShadow: s.sh }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                        <div>
+                          <div style={{ color: s.text, fontWeight: 700, fontSize: 16 }}>{c.name}</div>
+                          {c.phone && <div style={{ color: s.muted, fontSize: 13, marginTop: 2 }}>{c.phone}</div>}
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={() => openEditClient(c)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14 }}>✏️</button>
+                          <button onClick={() => { if (confirm("Удалить клиента?")) deleteClient(c.id); }} style={{ background: "none", border: "1px solid #f8717144", color: "#f87171", padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14 }}>✕</button>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={{ background: typeBg, color: typeColor, padding: "4px 10px", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>{c.client_type}</span>
+                        {c.price_per_unit && <span style={{ color: s.gold, fontWeight: 700, fontSize: 13 }}>{Number(c.price_per_unit).toLocaleString()} ₸/шт</span>}
+                        {debt > 0 && <span style={{ color: "#f87171", fontWeight: 700, fontSize: 13 }}>долг: {debt.toLocaleString()} ₸</span>}
+                        {c.notes && <span style={{ color: s.muted, fontSize: 12 }}>{c.notes}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${s.border}` }}>
-                    {["Клиент","Телефон","Тип","Ставка (₸/шт)","Долг","Заметки",""].map((h) => (
-                      <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600 }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.length === 0 && (
-                    <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: s.muted }}>Нет клиентов. Добавьте первого.</td></tr>
-                  )}
-                  {clients.map((c) => {
-                    const clientOrders = orders.filter((o) => o.client_name === c.name || (c.phone && o.phone === c.phone));
-                    const debt = clientOrders.reduce((s, o) => s + ((o.total_amount || 0) - (o.paid_amount || 0)), 0);
-                    return (
-                      <tr key={c.id} style={{ borderBottom: `1px solid ${s.border}` }}>
-                        <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 600 }}>{c.name}</td>
-                        <td style={{ padding: "10px 14px", color: s.muted }}>{c.phone || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>
-                          <span style={{ background: c.client_type === "консигнация" ? "#7c3aed22" : c.client_type === "опт" ? "#c8a96e22" : "#1a1815", color: c.client_type === "консигнация" ? "#a78bfa" : c.client_type === "опт" ? s.gold : s.muted, padding: "2px 8px", borderRadius: 6, fontSize: 11 }}>
-                            {c.client_type}
-                          </span>
-                        </td>
-                        <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 700 }}>
-                          {c.price_per_unit ? `${Number(c.price_per_unit).toLocaleString()} ₸` : "—"}
-                        </td>
-                        <td style={{ padding: "10px 14px", color: debt > 0 ? "#f87171" : s.muted, fontWeight: debt > 0 ? 700 : 400 }}>
-                          {debt > 0 ? `${debt.toLocaleString()} ₸` : "—"}
-                        </td>
-                        <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{c.notes || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button onClick={() => openEditClient(c)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "3px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✏️</button>
-                            <button onClick={() => { if (confirm("Удалить клиента?")) deleteClient(c.id); }} style={{ background: "none", border: `1px solid ${s.border}`, color: "#f87171", padding: "3px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            ) : (
+              <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
+                <h2 style={{ color: s.gold, fontSize: 15, margin: "0 0 16px" }}>Клиенты и ставки</h2>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                      {["Клиент","Телефон","Тип","Ставка (₸/шт)","Долг","Заметки",""].map((h) => (
+                        <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clients.length === 0 && (
+                      <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", color: s.muted }}>Нет клиентов. Добавьте первого.</td></tr>
+                    )}
+                    {clients.map((c) => {
+                      const clientOrders = orders.filter((o) => o.client_name === c.name || (c.phone && o.phone === c.phone));
+                      const debt = clientOrders.reduce((sum, o) => sum + ((o.total_amount || 0) - (o.paid_amount || 0)), 0);
+                      return (
+                        <tr key={c.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                          <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 600 }}>{c.name}</td>
+                          <td style={{ padding: "10px 14px", color: s.muted }}>{c.phone || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <span style={{ background: c.client_type === "консигнация" ? "#7c3aed22" : c.client_type === "опт" ? "#c8a96e22" : "#f0f0ee", color: c.client_type === "консигнация" ? "#a78bfa" : c.client_type === "опт" ? s.gold : s.muted, padding: "2px 8px", borderRadius: 6, fontSize: 11 }}>
+                              {c.client_type}
+                            </span>
+                          </td>
+                          <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 700 }}>
+                            {c.price_per_unit ? `${Number(c.price_per_unit).toLocaleString()} ₸` : "—"}
+                          </td>
+                          <td style={{ padding: "10px 14px", color: debt > 0 ? "#f87171" : s.muted, fontWeight: debt > 0 ? 700 : 400 }}>
+                            {debt > 0 ? `${debt.toLocaleString()} ₸` : "—"}
+                          </td>
+                          <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{c.notes || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button onClick={() => openEditClient(c)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "3px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✏️</button>
+                              <button onClick={() => { if (confirm("Удалить клиента?")) deleteClient(c.id); }} style={{ background: "none", border: `1px solid ${s.border}`, color: "#f87171", padding: "3px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Client modal */}
             {showClientModal && (
-              <div style={{ position: "fixed", inset: 0, background: "#000a", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }}>
-                <div style={{ background: s.card, borderRadius: 16, padding: 28, width: 420, border: `1px solid ${s.border}` }}>
-                  <h3 style={{ color: s.gold, marginBottom: 20 }}>{editingClient ? "Редактировать клиента" : "Добавить клиента"}</h3>
+              <div style={{ position: "fixed", inset: 0, background: "#000a", display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", zIndex: 999 }}>
+                <div style={{ background: s.card, borderRadius: isMobile ? "20px 20px 0 0" : 16, padding: isMobile ? "24px 20px 36px" : 28, width: isMobile ? "100%" : 420, border: `1px solid ${s.border}`, boxSizing: "border-box" }}>
+                  <h3 style={{ color: s.gold, marginBottom: 20, fontSize: 16 }}>{editingClient ? "Редактировать клиента" : "Добавить клиента"}</h3>
                   {[
                     { label: "Имя / название *", key: "name", type: "text" },
-                    { label: "Телефон", key: "phone", type: "text" },
+                    { label: "Телефон", key: "phone", type: "tel" },
                     { label: "Ставка за 1 шт (₸)", key: "price_per_unit", type: "number" },
                     { label: "Заметки", key: "notes", type: "text" },
                   ].map(({ label, key, type }) => (
                     <div key={key} style={{ marginBottom: 14 }}>
                       <div style={{ color: s.muted, fontSize: 12, marginBottom: 4 }}>{label}</div>
-                      <input type={type} value={clientForm[key]} onChange={(e) => setClientForm((f) => ({ ...f, [key]: e.target.value }))}
-                        style={{ width: "100%", background: s.bg, border: `1px solid ${s.border}`, color: s.text, padding: "8px 12px", borderRadius: 8, fontSize: 13, boxSizing: "border-box" }} />
+                      <input type={type} inputMode={type === "number" ? "numeric" : "text"} value={clientForm[key]} onChange={(e) => setClientForm((f) => ({ ...f, [key]: e.target.value }))}
+                        style={{ width: "100%", background: s.bg, border: `1px solid ${s.border}`, color: s.text, padding: isMobile ? "13px 12px" : "8px 12px", borderRadius: 10, fontSize: isMobile ? 16 : 13, boxSizing: "border-box", outline: "none" }} />
                     </div>
                   ))}
                   <div style={{ marginBottom: 20 }}>
-                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 4 }}>Тип клиента</div>
-                    <select value={clientForm.client_type} onChange={(e) => setClientForm((f) => ({ ...f, client_type: e.target.value }))}
-                      style={{ width: "100%", background: s.bg, border: `1px solid ${s.border}`, color: s.text, padding: "8px 12px", borderRadius: 8, fontSize: 13 }}>
-                      <option>розница</option>
-                      <option>опт</option>
-                      <option>консигнация</option>
-                    </select>
+                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 8 }}>Тип клиента</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {["розница","опт","консигнация"].map((t) => (
+                        <button key={t} onClick={() => setClientForm((f) => ({ ...f, client_type: t }))}
+                          style={{ flex: 1, padding: isMobile ? "12px 4px" : "8px 0", borderRadius: 10, border: `2px solid ${clientForm.client_type === t ? s.gold : s.border}`, background: clientForm.client_type === t ? "#11182710" : "none", color: clientForm.client_type === t ? s.gold : s.muted, fontSize: isMobile ? 13 : 12, cursor: "pointer", fontWeight: clientForm.client_type === t ? 700 : 400 }}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button onClick={() => setShowClientModal(false)} style={{ flex: 1, background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "9px 0", borderRadius: 8, cursor: "pointer" }}>Отмена</button>
+                    <button onClick={() => setShowClientModal(false)} style={{ flex: 1, background: "none", border: `1px solid ${s.border}`, color: s.text, padding: isMobile ? "13px 0" : "9px 0", borderRadius: 10, cursor: "pointer", fontSize: isMobile ? 15 : 13 }}>Отмена</button>
                     <button onClick={saveClient} disabled={!clientForm.name}
-                      style={{ flex: 2, background: clientForm.name ? s.gold : s.border, color: clientForm.name ? "#ffffff" : s.muted, border: "none", padding: "9px 0", borderRadius: 8, cursor: clientForm.name ? "pointer" : "default", fontWeight: 700 }}>
+                      style={{ flex: 2, background: clientForm.name ? s.gold : s.border, color: clientForm.name ? "#ffffff" : s.muted, border: "none", padding: isMobile ? "13px 0" : "9px 0", borderRadius: 10, cursor: clientForm.name ? "pointer" : "default", fontWeight: 700, fontSize: isMobile ? 15 : 13 }}>
                       {editingClient ? "Сохранить" : "Добавить"}
                     </button>
                   </div>
