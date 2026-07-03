@@ -20,6 +20,13 @@ const PIE_COLORS_PROD = ["#c8a96e","#64b5f6","#81c784","#e57373","#f06292","#ffb
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState(null);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   const [tab, setTab] = useState(0);
   const [todayStats, setTodayStats] = useState({ orders: 0, cakes: 0 });
   const [totalOrders, setTotalOrders] = useState(0);
@@ -652,37 +659,38 @@ export default function Dashboard() {
       )}
 
       {/* Header */}
-      <div style={{ backgroundColor: s.card, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", padding: "14px 28px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 22 }}>🍰</span>
-          <span style={{ color: s.gold, fontWeight: 700, fontSize: 17, letterSpacing: "-0.3px" }}>BerryCake</span>
+      <div style={{ backgroundColor: s.card, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", padding: isMobile ? "12px 16px" : "14px 28px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 20 }}>🍰</span>
+          <span style={{ color: s.gold, fontWeight: 700, fontSize: isMobile ? 15 : 17, letterSpacing: "-0.3px" }}>BerryCake</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {lastSync && <span style={{ color: s.muted, fontSize: 12 }}>{lastSync}</span>}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {!isMobile && lastSync && <span style={{ color: s.muted, fontSize: 12 }}>{lastSync}</span>}
           <button onClick={syncNow} disabled={syncing}
-            style={{ background: s.gold, border: "none", color: "#ffffff", padding: "7px 16px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: 13, fontWeight: 600, opacity: syncing ? 0.6 : 1 }}>
-            {syncing ? "Загрузка..." : "Обновить"}
+            style={{ background: s.gold, border: "none", color: "#ffffff", padding: isMobile ? "6px 12px" : "7px 16px", borderRadius: 8, cursor: syncing ? "default" : "pointer", fontSize: isMobile ? 12 : 13, fontWeight: 600, opacity: syncing ? 0.6 : 1 }}>
+            {syncing ? "..." : "Обновить"}
           </button>
-          <span style={{ color: s.muted, fontSize: 13 }}>{user.name}</span>
+          {!isMobile && <span style={{ color: s.muted, fontSize: 13 }}>{user.name}</span>}
           <button onClick={() => { localStorage.removeItem("bc_auth"); router.replace("/login"); }}
-            style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+            style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: isMobile ? "6px 10px" : "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: isMobile ? 12 : 13 }}>
             Выйти
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ backgroundColor: s.card, display: "flex", gap: 0, padding: "0 28px", borderBottom: `1px solid ${s.border}` }}>
+      <div style={{ backgroundColor: s.card, display: "flex", gap: 0, padding: isMobile ? "0 8px" : "0 28px", borderBottom: `1px solid ${s.border}`, overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
         {TABS.map((t, i) => (
           <button key={i} onClick={() => setTab(i)} style={{
             background: "none", border: "none", color: tab === i ? s.gold : s.muted, fontWeight: tab === i ? 600 : 400,
-            fontSize: 13, padding: "12px 16px", cursor: "pointer", borderBottom: tab === i ? `2px solid ${s.gold}` : "2px solid transparent",
-            transition: "color 0.15s", whiteSpace: "nowrap",
+            fontSize: isMobile ? 12 : 13, padding: isMobile ? "11px 10px" : "12px 16px", cursor: "pointer",
+            borderBottom: tab === i ? `2px solid ${s.gold}` : "2px solid transparent",
+            transition: "color 0.15s", whiteSpace: "nowrap", flexShrink: 0,
           }}>{t}</button>
         ))}
       </div>
 
-      <div style={{ padding: "24px 28px" }}>
+      <div style={{ padding: isMobile ? "16px 12px" : "24px 28px" }}>
         {/* ── TAB 0: Обзор ── */}
         {tab === 0 && (() => {
           const prevMonth = () => {
@@ -740,7 +748,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 32 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)", gap: isMobile ? 10 : 16, marginBottom: 32 }}>
                 {[
                   ["Заказов за месяц", mOrders.length],
                   ["Тортов за месяц", mCakes],
@@ -770,7 +778,7 @@ export default function Dashboard() {
                 }
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 16 : 24 }}>
                 <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                   <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 16 }}>Топ вкусов — {monthLabel}</h2>
                   {mFlavors.length === 0
@@ -1064,7 +1072,7 @@ export default function Dashboard() {
               </div>
 
               {/* Stat cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3,1fr)", gap: isMobile ? 10 : 16, marginBottom: 24 }}>
                 {[
                   { label: "Итого за месяц", val: `${monthTotal.toLocaleString("ru-RU")} ₸`, color: "#e57373" },
                   { label: "Записей", val: monthExpenses.length, color: s.text },
@@ -1079,7 +1087,7 @@ export default function Dashboard() {
 
               {/* Charts row */}
               {monthTotal > 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 20, marginBottom: 24 }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1.6fr", gap: 20, marginBottom: 24 }}>
                   {/* Donut chart */}
                   <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh }}>
                     <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 12 }}>По категориям</h3>
@@ -1121,101 +1129,212 @@ export default function Dashboard() {
 
               {/* Add expense form — only for Дархан/Айдын/Алиби */}
               {canAddExpense && (
-                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24, border: `1px solid ${s.border}` }}>
-                  <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 18 }}>Добавить расход</h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                    {/* Description with autocomplete */}
-                    <div style={{ gridColumn: "1 / -1", position: "relative" }}>
-                      <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Описание *</label>
-                      <input
-                        value={expForm.description}
-                        onChange={(e) => { setExpForm((f) => ({ ...f, description: e.target.value })); getExpDescSuggestions(e.target.value); }}
-                        onBlur={() => setTimeout(() => setExpDescSuggestions([]), 150)}
-                        placeholder="Например: мука, масло 82%, зарплата за июль..."
-                        style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                      />
-                      {expDescSuggestions.length > 0 && (
-                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: "#222", border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 20, overflow: "hidden", marginTop: 2 }}>
-                          {expDescSuggestions.map((d) => (
-                            <div key={d} onClick={() => { setExpForm((f) => ({ ...f, description: d })); setExpDescSuggestions([]); }}
-                              style={{ padding: "9px 14px", cursor: "pointer", fontSize: 13, borderBottom: `1px solid ${s.border}` }}
-                              onMouseEnter={e => e.currentTarget.style.backgroundColor = s.card}
-                              onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                              {d}
+                <div style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? 16 : 24, marginBottom: 24, border: `1px solid ${s.border}` }}>
+                  <h3 style={{ color: s.gold, fontSize: 14, marginBottom: isMobile ? 14 : 18 }}>Добавить расход</h3>
+
+                  {isMobile ? (
+                    /* ── MOBILE FORM ── */
+                    <div>
+                      {/* Category chips */}
+                      <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Категория</label>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 7, marginBottom: 16 }}>
+                        {[
+                          { k: "ингредиенты", e: "🌾" }, { k: "упаковка", e: "📦" }, { k: "зарплата", e: "💰" },
+                          { k: "аренда", e: "🏠" }, { k: "доставка", e: "🚚" }, { k: "реклама", e: "📢" },
+                          { k: "оборудование", e: "🔧" }, { k: "обед", e: "🍱" }, { k: "налоги", e: "🧾" }, { k: "прочее", e: "📌" },
+                        ].map(({ k, e }) => (
+                          <button key={k} onClick={() => setExpForm((f) => ({ ...f, category: k, unit: "" }))}
+                            style={{
+                              padding: "10px 4px", borderRadius: 10, border: `2px solid ${expForm.category === k ? s.gold : s.border}`,
+                              background: expForm.category === k ? "#11182710" : "none", cursor: "pointer",
+                              display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                            }}>
+                            <span style={{ fontSize: 18 }}>{e}</span>
+                            <span style={{ fontSize: 9, color: expForm.category === k ? s.gold : s.muted, fontWeight: expForm.category === k ? 700 : 400, lineHeight: 1.2, textAlign: "center" }}>{k}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Qty + unit (if needed) */}
+                      {(expForm.category === "ингредиенты" || expForm.category === "упаковка") && (
+                        <div style={{ marginBottom: 14 }}>
+                          <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Кол-во</label>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <input type="number" inputMode="decimal" placeholder="25"
+                              value={expForm.quantity_amount}
+                              onChange={(e) => setExpForm((f) => ({ ...f, quantity_amount: e.target.value }))}
+                              style={{ width: 90, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "12px", color: s.text, fontSize: 16, outline: "none" }}
+                            />
+                            <div style={{ display: "flex", gap: 6, flex: 1 }}>
+                              {UNITS.map((u) => (
+                                <button key={u} onClick={() => setExpForm((f) => ({ ...f, unit: u }))}
+                                  style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: `1px solid ${expForm.unit === u ? s.gold : s.border}`, background: expForm.unit === u ? s.gold + "22" : "none", color: expForm.unit === u ? s.gold : s.muted, fontSize: 13, cursor: "pointer", fontWeight: expForm.unit === u ? 700 : 400 }}>
+                                  {u}
+                                </button>
+                              ))}
                             </div>
-                          ))}
+                          </div>
                         </div>
                       )}
-                    </div>
 
-                    {/* Category */}
-                    <div>
-                      <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Категория</label>
-                      <select value={expForm.category} onChange={(e) => setExpForm((f) => ({ ...f, category: e.target.value, unit: "" }))}
-                        style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13 }}>
-                        {EXPENSE_CATS.map((c) => <option key={c}>{c}</option>)}
-                      </select>
-                    </div>
+                      {/* Description */}
+                      <div style={{ marginBottom: 14, position: "relative" }}>
+                        <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Описание *</label>
+                        <input
+                          value={expForm.description}
+                          onChange={(e) => { setExpForm((f) => ({ ...f, description: e.target.value })); getExpDescSuggestions(e.target.value); }}
+                          onBlur={() => setTimeout(() => setExpDescSuggestions([]), 150)}
+                          placeholder="мука, масло, зарплата..."
+                          style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "13px 12px", color: s.text, fontSize: 16, outline: "none", boxSizing: "border-box" }}
+                        />
+                        {expDescSuggestions.length > 0 && (
+                          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 20, overflow: "hidden", marginTop: 2, boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>
+                            {expDescSuggestions.map((d) => (
+                              <div key={d} onClick={() => { setExpForm((f) => ({ ...f, description: d })); setExpDescSuggestions([]); }}
+                                style={{ padding: "12px 14px", cursor: "pointer", fontSize: 14, borderBottom: `1px solid ${s.border}`, color: s.text }}>
+                                {d}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
-                    {/* Unit — show if ингредиенты or упаковка */}
-                    {(expForm.category === "ингредиенты" || expForm.category === "упаковка") ? (
-                      <div>
-                        <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Кол-во + ед. измерения</label>
+                      {/* Amount — big */}
+                      <div style={{ marginBottom: 14 }}>
+                        <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Сумма ₸ *</label>
+                        <input
+                          type="number" inputMode="numeric" placeholder="0"
+                          value={expForm.amount}
+                          onChange={(e) => setExpForm((f) => ({ ...f, amount: e.target.value }))}
+                          style={{ width: "100%", backgroundColor: s.bg, border: `2px solid ${expForm.amount ? s.gold : s.border}`, borderRadius: 12, padding: "14px 16px", color: s.text, fontSize: 32, fontWeight: 700, outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+
+                      {/* Date */}
+                      <div style={{ marginBottom: 16 }}>
+                        <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Дата</label>
+                        <input type="date" value={expForm.expense_date}
+                          onChange={(e) => setExpForm((f) => ({ ...f, expense_date: e.target.value }))}
+                          style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "13px 12px", color: s.text, fontSize: 16, outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+
+                      {/* Payment type — big buttons */}
+                      <div style={{ marginBottom: 18 }}>
+                        <label style={{ color: s.muted, fontSize: 11, display: "block", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Тип оплаты</label>
                         <div style={{ display: "flex", gap: 8 }}>
-                          <input
-                            type="number" placeholder="25"
-                            value={expForm.quantity_amount}
-                            onChange={(e) => setExpForm((f) => ({ ...f, quantity_amount: e.target.value }))}
-                            style={{ width: 80, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 10px", color: s.text, fontSize: 13, outline: "none" }}
-                          />
-                          <select value={expForm.unit} onChange={(e) => setExpForm((f) => ({ ...f, unit: e.target.value }))}
-                            style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 10px", color: s.text, fontSize: 13 }}>
-                            <option value="">— ед.</option>
-                            {UNITS.map((u) => <option key={u}>{u}</option>)}
-                          </select>
+                          {PAY_TYPES.map((pt) => (
+                            <button key={pt} onClick={() => setExpForm((f) => ({ ...f, payment_type: pt }))}
+                              style={{ flex: 1, padding: "14px 8px", borderRadius: 10, border: `2px solid ${expForm.payment_type === pt ? s.gold : s.border}`, background: expForm.payment_type === pt ? "#11182710" : "none", color: expForm.payment_type === pt ? s.gold : s.muted, fontSize: 13, cursor: "pointer", fontWeight: expForm.payment_type === pt ? 700 : 400 }}>
+                              {pt}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    ) : <div />}
 
-                    {/* Amount */}
+                      <button onClick={addExpense} disabled={expSaving || !expForm.description || !expForm.amount}
+                        style={{ width: "100%", backgroundColor: (expSaving || !expForm.description || !expForm.amount) ? s.border : s.gold, border: "none", borderRadius: 12, padding: "16px", color: (expSaving || !expForm.description || !expForm.amount) ? s.muted : "#ffffff", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>
+                        {expSaving ? "Сохранение..." : "✓ Добавить расход"}
+                      </button>
+                    </div>
+                  ) : (
+                    /* ── DESKTOP FORM ── */
                     <div>
-                      <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Сумма (₸) *</label>
-                      <input
-                        type="number" placeholder="15000"
-                        value={expForm.amount}
-                        onChange={(e) => setExpForm((f) => ({ ...f, amount: e.target.value }))}
-                        style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                      />
-                    </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                        {/* Description with autocomplete */}
+                        <div style={{ gridColumn: "1 / -1", position: "relative" }}>
+                          <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Описание *</label>
+                          <input
+                            value={expForm.description}
+                            onChange={(e) => { setExpForm((f) => ({ ...f, description: e.target.value })); getExpDescSuggestions(e.target.value); }}
+                            onBlur={() => setTimeout(() => setExpDescSuggestions([]), 150)}
+                            placeholder="Например: мука, масло 82%, зарплата за июль..."
+                            style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                          />
+                          {expDescSuggestions.length > 0 && (
+                            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: "#222", border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 20, overflow: "hidden", marginTop: 2 }}>
+                              {expDescSuggestions.map((d) => (
+                                <div key={d} onClick={() => { setExpForm((f) => ({ ...f, description: d })); setExpDescSuggestions([]); }}
+                                  style={{ padding: "9px 14px", cursor: "pointer", fontSize: 13, borderBottom: `1px solid ${s.border}` }}
+                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = s.card}
+                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                                  {d}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
-                    {/* Date */}
-                    <div>
-                      <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Дата</label>
-                      <input
-                        type="date" value={expForm.expense_date}
-                        onChange={(e) => setExpForm((f) => ({ ...f, expense_date: e.target.value }))}
-                        style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
-                      />
-                    </div>
-                  </div>
+                        {/* Category */}
+                        <div>
+                          <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Категория</label>
+                          <select value={expForm.category} onChange={(e) => setExpForm((f) => ({ ...f, category: e.target.value, unit: "" }))}
+                            style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13 }}>
+                            {EXPENSE_CATS.map((c) => <option key={c}>{c}</option>)}
+                          </select>
+                        </div>
 
-                  {/* Payment type */}
-                  <div style={{ marginTop: 14 }}>
-                    <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 8 }}>Тип оплаты</label>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {PAY_TYPES.map((pt) => (
-                        <button key={pt} onClick={() => setExpForm((f) => ({ ...f, payment_type: pt }))}
-                          style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${expForm.payment_type === pt ? s.gold : s.border}`, background: expForm.payment_type === pt ? s.gold + "22" : "none", color: expForm.payment_type === pt ? s.gold : s.muted, fontSize: 13, cursor: "pointer", fontWeight: expForm.payment_type === pt ? 700 : 400 }}>
-                          {pt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                        {/* Unit — show if ингредиенты or упаковка */}
+                        {(expForm.category === "ингредиенты" || expForm.category === "упаковка") ? (
+                          <div>
+                            <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Кол-во + ед. измерения</label>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <input
+                                type="number" placeholder="25"
+                                value={expForm.quantity_amount}
+                                onChange={(e) => setExpForm((f) => ({ ...f, quantity_amount: e.target.value }))}
+                                style={{ width: 80, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 10px", color: s.text, fontSize: 13, outline: "none" }}
+                              />
+                              <select value={expForm.unit} onChange={(e) => setExpForm((f) => ({ ...f, unit: e.target.value }))}
+                                style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 10px", color: s.text, fontSize: 13 }}>
+                                <option value="">— ед.</option>
+                                {UNITS.map((u) => <option key={u}>{u}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ) : <div />}
 
-                  <button onClick={addExpense} disabled={expSaving || !expForm.description || !expForm.amount}
-                    style={{ marginTop: 18, width: "100%", backgroundColor: (expSaving || !expForm.description || !expForm.amount) ? s.border : s.gold, border: "none", borderRadius: 8, padding: "11px", color: (expSaving || !expForm.description || !expForm.amount) ? s.muted : "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                    {expSaving ? "Сохранение..." : "Добавить расход"}
-                  </button>
+                        {/* Amount */}
+                        <div>
+                          <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Сумма (₸) *</label>
+                          <input
+                            type="number" placeholder="15000"
+                            value={expForm.amount}
+                            onChange={(e) => setExpForm((f) => ({ ...f, amount: e.target.value }))}
+                            style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                          />
+                        </div>
+
+                        {/* Date */}
+                        <div>
+                          <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Дата</label>
+                          <input
+                            type="date" value={expForm.expense_date}
+                            onChange={(e) => setExpForm((f) => ({ ...f, expense_date: e.target.value }))}
+                            style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Payment type */}
+                      <div style={{ marginTop: 14 }}>
+                        <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 8 }}>Тип оплаты</label>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          {PAY_TYPES.map((pt) => (
+                            <button key={pt} onClick={() => setExpForm((f) => ({ ...f, payment_type: pt }))}
+                              style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${expForm.payment_type === pt ? s.gold : s.border}`, background: expForm.payment_type === pt ? s.gold + "22" : "none", color: expForm.payment_type === pt ? s.gold : s.muted, fontSize: 13, cursor: "pointer", fontWeight: expForm.payment_type === pt ? 700 : 400 }}>
+                              {pt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button onClick={addExpense} disabled={expSaving || !expForm.description || !expForm.amount}
+                        style={{ marginTop: 18, width: "100%", backgroundColor: (expSaving || !expForm.description || !expForm.amount) ? s.border : s.gold, border: "none", borderRadius: 8, padding: "11px", color: (expSaving || !expForm.description || !expForm.amount) ? s.muted : "#ffffff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                        {expSaving ? "Сохранение..." : "Добавить расход"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1229,44 +1348,73 @@ export default function Dashboard() {
                 ))}
               </div>
 
-              {/* Table */}
-              <div style={{ backgroundColor: s.card, borderRadius: 12, overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${s.border}` }}>
-                      {["Дата","Категория","Описание","Кол-во","Тип оплаты","Сумма","Кто",""].map((h) => (
-                        <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredExpenses.length === 0 && (
-                      <tr><td colSpan={8} style={{ padding: 32, textAlign: "center", color: s.muted }}>Нет расходов за {expMonthLabel}</td></tr>
-                    )}
-                    {filteredExpenses.map((e) => (
-                      <tr key={e.id} style={{ borderBottom: `1px solid ${s.border}` }}>
-                        <td style={{ padding: "10px 14px", color: s.muted, whiteSpace: "nowrap" }}>{e.expense_date || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>
-                          <span style={{ background: "#2a2825", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>{e.category || "прочее"}</span>
-                        </td>
-                        <td style={{ padding: "10px 14px", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description || "—"}</td>
-                        <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>
-                          {e.quantity_amount ? `${e.quantity_amount} ${e.unit || ""}` : "—"}
-                        </td>
-                        <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{e.payment_type || "—"}</td>
-                        <td style={{ padding: "10px 14px", color: "#e57373", fontWeight: 700 }}>{e.amount ? `${Number(e.amount).toLocaleString("ru-RU")} ₸` : "—"}</td>
-                        <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{e.confirmed_by || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>
+              {/* Expenses list */}
+              {isMobile ? (
+                <div>
+                  {filteredExpenses.length === 0 && (
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 32, textAlign: "center", color: s.muted, fontSize: 13 }}>Нет расходов за {expMonthLabel}</div>
+                  )}
+                  {filteredExpenses.map((e) => (
+                    <div key={e.id} style={{ backgroundColor: s.card, borderRadius: 12, padding: "14px 16px", marginBottom: 10, boxShadow: s.sh }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+                          <div style={{ color: s.text, fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description || "—"}</div>
+                          <div style={{ color: s.muted, fontSize: 12, marginTop: 2 }}>
+                            {e.expense_date || "—"} · {e.payment_type || "—"}
+                            {e.quantity_amount ? ` · ${e.quantity_amount} ${e.unit || ""}` : ""}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          <span style={{ color: "#e57373", fontWeight: 700, fontSize: 16 }}>{e.amount ? `${Number(e.amount).toLocaleString("ru-RU")} ₸` : "—"}</span>
                           {canAddExpense && (
                             <button onClick={() => deleteExpense(e.id)}
-                              style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                              style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 13 }}>✕</button>
                           )}
-                        </td>
+                        </div>
+                      </div>
+                      <span style={{ background: "#f0f0ee", borderRadius: 6, padding: "3px 8px", fontSize: 11, color: s.muted }}>{e.category || "прочее"}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ backgroundColor: s.card, borderRadius: 12, overflow: "hidden" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                        {["Дата","Категория","Описание","Кол-во","Тип оплаты","Сумма","Кто",""].map((h) => (
+                          <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {filteredExpenses.length === 0 && (
+                        <tr><td colSpan={8} style={{ padding: 32, textAlign: "center", color: s.muted }}>Нет расходов за {expMonthLabel}</td></tr>
+                      )}
+                      {filteredExpenses.map((e) => (
+                        <tr key={e.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                          <td style={{ padding: "10px 14px", color: s.muted, whiteSpace: "nowrap" }}>{e.expense_date || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <span style={{ background: "#f0f0ee", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>{e.category || "прочее"}</span>
+                          </td>
+                          <td style={{ padding: "10px 14px", maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.description || "—"}</td>
+                          <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>
+                            {e.quantity_amount ? `${e.quantity_amount} ${e.unit || ""}` : "—"}
+                          </td>
+                          <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{e.payment_type || "—"}</td>
+                          <td style={{ padding: "10px 14px", color: "#e57373", fontWeight: 700 }}>{e.amount ? `${Number(e.amount).toLocaleString("ru-RU")} ₸` : "—"}</td>
+                          <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{e.confirmed_by || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            {canAddExpense && (
+                              <button onClick={() => deleteExpense(e.id)}
+                                style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           );
         })()}
