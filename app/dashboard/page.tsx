@@ -67,6 +67,14 @@ export default function Dashboard() {
   const [recipeForm, setRecipeForm] = useState<any>({ flavor: "", yield_count: 12, notes: "", ingredients: [] });
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [prodSubTab, setProdSubTab] = useState(0);
+  const [products, setProducts] = useState<any[]>([]);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [productForm, setProductForm] = useState({ name: "", unit: "г", category: "ингредиент", notes: "" });
+  const [showPrihodModal, setShowPrihodModal] = useState(false);
+  const [prihodProduct, setPrihodProduct] = useState<any>(null);
+  const [prihodForm, setPrihodForm] = useState({ quantity: "", amount: "", payment_type: "нал", date: new Date().toISOString().slice(0,10) });
+  const [savingPrihod, setSavingPrihod] = useState(false);
   const [revisions, setRevisions] = useState<any[]>([]);
   const [showRevisionForm, setShowRevisionForm] = useState(false);
   const [revisionActuals, setRevisionActuals] = useState<Record<string, string>>({});
@@ -159,19 +167,100 @@ export default function Dashboard() {
     }).filter((i) => i.required > 0).sort((a, b) => (b.needToBuy ? 1 : 0) - (a.needToBuy ? 1 : 0));
   };
 
+  const fetchProducts = async () => {
+    const { data } = await supabase.from("berrycake_products").select("*").order("category").order("name");
+    if (data) setProducts(data);
+  };
+
+  const saveProduct = async () => {
+    const payload = { name: productForm.name, unit: productForm.unit, category: productForm.category, notes: productForm.notes || null };
+    if (editingProduct) {
+      await supabase.from("berrycake_products").update(payload).eq("id", editingProduct.id);
+    } else {
+      await supabase.from("berrycake_products").insert(payload);
+    }
+    setShowProductModal(false);
+    setEditingProduct(null);
+    setProductForm({ name: "", unit: "г", category: "ингредиент", notes: "" });
+    fetchProducts();
+  };
+
+  const deleteProduct = async (id: string) => {
+    if (!confirm("Удалить товар из каталога?")) return;
+    await supabase.from("berrycake_products").delete().eq("id", id);
+    fetchProducts();
+  };
+
+  const openPrihod = (p: any) => {
+    setPrihodProduct(p);
+    setPrihodForm({ quantity: "", amount: "", payment_type: "нал", date: new Date().toISOString().slice(0,10) });
+    setShowPrihodModal(true);
+  };
+
+  const savePrihod = async () => {
+    if (!prihodForm.quantity || !prihodForm.amount) return;
+    setSavingPrihod(true);
+    const auth = JSON.parse(localStorage.getItem("bc_auth") || "{}");
+    const catMap: Record<string, string> = { "ингредиент": "ингредиенты", "упаковка": "упаковка", "прочее": "прочее" };
+    await supabase.from("berrycake_expenses").insert({
+      description: prihodProduct.name,
+      category: catMap[prihodProduct.category] || "прочее",
+      amount: parseFloat(prihodForm.amount),
+      quantity_amount: parseFloat(prihodForm.quantity),
+      unit: prihodProduct.unit,
+      payment_type: prihodForm.payment_type,
+      expense_date: prihodForm.date,
+      confirmed_by: auth.name || null,
+    });
+    setSavingPrihod(false);
+    setShowPrihodModal(false);
+    fetchExpenses();
+  };
+
+  const getProductStock = (product: any) => {
+    const { base } = toBaseUnit(0, product.unit);
+    let purchased = 0;
+    expenses.forEach((e) => {
+      if (!e.quantity_amount) return;
+      const desc = (e.description || "").toLowerCase();
+      const name = product.name.toLowerCase();
+      if (desc.includes(name) || name.includes(desc)) {
+        const { val } = toBaseUnit(parseFloat(e.quantity_amount) || 0, e.unit || product.unit);
+        purchased += val;
+      }
+    });
+    let consumed = 0;
+    production.forEach((p) => {
+      const recipe = recipes.find((r) => r.flavor === p.flavor);
+      if (!recipe) return;
+      const batches = (p.quantity || 0) / (recipe.yield_count || 1);
+      (recipe.ingredients || []).forEach((ing: any) => {
+        if (!ing.name || !ing.amount) return;
+        const ingName = ing.name.toLowerCase();
+        const prodName = product.name.toLowerCase();
+        if (ingName.includes(prodName) || prodName.includes(ingName)) {
+          const { val } = toBaseUnit(parseFloat(ing.amount) * batches, ing.unit || product.unit);
+          consumed += val;
+        }
+      });
+    });
+    return { purchased, consumed, stock: purchased - consumed, base };
+  };
+
   const fetchRevisions = async () => {
     const { data } = await supabase.from("berrycake_revisions").select("*").order("revision_date", { ascending: false }).limit(20);
     if (data) setRevisions(data);
   };
 
   const saveRevision = async () => {
-    const stock = calcExpectedStock();
     setSavingRevision(true);
     const auth = JSON.parse(localStorage.getItem("bc_auth") || "{}");
-    const items = Object.entries(stock).map(([ingredient, { base, expected }]) => {
-      const actualRaw = parseFloat(revisionActuals[ingredient] || "0");
-      const { val: actualBase } = toBaseUnit(actualRaw, base);
-      return { ingredient, unit: base, expected: Math.round(expected), actual: Math.round(actualBase), diff: Math.round(actualBase - expected) };
+    const items = products.map((p) => {
+      const st = getProductStock(p);
+      const expected = Math.max(0, st.stock);
+      const actualRaw = parseFloat(revisionActuals[p.name] || "0");
+      const { val: actualBase } = toBaseUnit(actualRaw, st.base);
+      return { ingredient: p.name, unit: st.base, expected: Math.round(expected), actual: Math.round(actualBase), diff: Math.round(actualBase - expected) };
     });
     await supabase.from("berrycake_revisions").insert({
       revision_date: new Date().toISOString().slice(0, 10),
@@ -373,6 +462,7 @@ export default function Dashboard() {
     fetchRecipes();
     fetchProduction();
     fetchRevisions();
+    fetchProducts();
 
     const channel = supabase.channel("orders_realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "berrycake_orders" }, (payload) => {
@@ -1273,7 +1363,7 @@ export default function Dashboard() {
 
         {/* ── TAB 4: Производство ── */}
         {tab === 4 && (() => {
-          const PROD_SUB_TABS = ["Обзор цеха", "Тех карты", "Ревизия"];
+          const PROD_SUB_TABS = ["Обзор цеха", "Тех карты", "Склад", "Ревизия"];
 
           const prevProdMonth = () => {
             const [y, m] = prodMonth.split("-").map(Number);
@@ -1490,8 +1580,104 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* ── SUB 2: Ревизия ── */}
-              {prodSubTab === 2 && (
+              {/* ── SUB 2: Склад ── */}
+              {prodSubTab === 2 && (() => {
+                const PROD_CATS = ["ингредиент", "упаковка", "прочее"];
+                const CAT_UNITS: Record<string, string[]> = {
+                  "ингредиент": ["г","кг","л","мл","шт"],
+                  "упаковка": ["шт","уп"],
+                  "прочее": ["шт","уп","г","кг"],
+                };
+                const CAT_COLORS: Record<string, string> = { "ингредиент": "#c8a96e", "упаковка": "#64b5f6", "прочее": "#888" };
+
+                const grouped: Record<string, any[]> = {};
+                products.forEach((p) => {
+                  if (!grouped[p.category]) grouped[p.category] = [];
+                  grouped[p.category].push(p);
+                });
+
+                return (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                      <div>
+                        <h2 style={{ color: s.gold, fontSize: 16, margin: 0 }}>Каталог товаров и сырья</h2>
+                        <div style={{ color: s.muted, fontSize: 12, marginTop: 4 }}>{products.length} позиций</div>
+                      </div>
+                      <button onClick={() => { setEditingProduct(null); setProductForm({ name: "", unit: "г", category: "ингредиент", notes: "" }); setShowProductModal(true); }}
+                        style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "9px 20px", color: "#0f0e0c", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                        + Добавить товар
+                      </button>
+                    </div>
+
+                    {products.length === 0 && (
+                      <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 40, textAlign: "center", color: s.muted }}>
+                        Каталог пуст. Добавьте первый товар — ингредиент, упаковку или расходник.
+                      </div>
+                    )}
+
+                    {PROD_CATS.filter((cat) => grouped[cat]?.length > 0).map((cat) => (
+                      <div key={cat} style={{ marginBottom: 24 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                          <div style={{ width: 10, height: 10, borderRadius: "50%", backgroundColor: CAT_COLORS[cat] }} />
+                          <h3 style={{ color: CAT_COLORS[cat], fontSize: 13, fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 1 }}>
+                            {cat === "ингредиент" ? "Ингредиенты" : cat === "упаковка" ? "Упаковка" : "Прочее"} ({grouped[cat].length})
+                          </h3>
+                        </div>
+                        <div style={{ backgroundColor: s.card, borderRadius: 12, overflow: "hidden" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                            <thead>
+                              <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                                {["Название","Ед.","Куплено","Израсходовано","Остаток",""].map((h) => (
+                                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", color: s.muted, fontWeight: 600, fontSize: 12 }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {grouped[cat].map((p) => {
+                                const st = getProductStock(p);
+                                const isLow = st.stock < 0;
+                                return (
+                                  <tr key={p.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                                    <td style={{ padding: "12px 14px", fontWeight: 600 }}>{p.name}</td>
+                                    <td style={{ padding: "12px 14px", color: s.muted }}>{p.unit}</td>
+                                    <td style={{ padding: "12px 14px", color: "#81c784" }}>
+                                      {st.purchased > 0 ? fromBase(st.purchased, st.base) : "—"}
+                                    </td>
+                                    <td style={{ padding: "12px 14px", color: "#e57373" }}>
+                                      {st.consumed > 0 ? fromBase(st.consumed, st.base) : "—"}
+                                    </td>
+                                    <td style={{ padding: "12px 14px" }}>
+                                      <span style={{ color: isLow ? "#e57373" : st.stock > 0 ? s.gold : s.muted, fontWeight: 700 }}>
+                                        {st.stock !== 0 ? fromBase(Math.abs(st.stock), st.base) : "—"}
+                                        {isLow ? " ⚠️" : ""}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: "12px 14px" }}>
+                                      <div style={{ display: "flex", gap: 6 }}>
+                                        <button onClick={() => openPrihod(p)}
+                                          style={{ backgroundColor: "#81c78422", border: "1px solid #81c784", color: "#81c784", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                                          + Приход
+                                        </button>
+                                        <button onClick={() => { setEditingProduct(p); setProductForm({ name: p.name, unit: p.unit, category: p.category, notes: p.notes || "" }); setShowProductModal(true); }}
+                                          style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>✏️</button>
+                                        <button onClick={() => deleteProduct(p.id)}
+                                          style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* ── SUB 3: Ревизия ── */}
+              {prodSubTab === 3 && (
                 <div>
                   {/* Header */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
@@ -1505,33 +1691,40 @@ export default function Dashboard() {
                     </button>
                   </div>
 
-                  {/* Current expected stock */}
-                  {stockEntries.length > 0 && (
+                  {/* Current expected stock from catalog */}
+                  {products.length > 0 && (
                     <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, marginBottom: 24 }}>
-                      <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>Расчётные остатки (на основе закупок и производства)</h3>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ borderBottom: `1px solid ${s.border}` }}>
-                            {["Ингредиент","Закуплено","Израсходовано","Расчётный остаток"].map((h) => (
-                              <th key={h} style={{ padding: "8px 12px", textAlign: "left", color: s.muted, fontWeight: 600, fontSize: 12 }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {stockEntries.map(([name, { base, purchased, consumed, expected }]) => (
-                            <tr key={name} style={{ borderBottom: `1px solid ${s.border}` }}>
-                              <td style={{ padding: "10px 12px", fontWeight: 600 }}>{name}</td>
-                              <td style={{ padding: "10px 12px", color: "#81c784" }}>{fromBase(purchased, base)}</td>
-                              <td style={{ padding: "10px 12px", color: "#e57373" }}>{fromBase(consumed, base)}</td>
-                              <td style={{ padding: "10px 12px" }}>
-                                <span style={{ color: expected >= 0 ? s.gold : "#e57373", fontWeight: 700 }}>
-                                  {fromBase(Math.abs(expected), base)}{expected < 0 ? " ⚠️" : ""}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <h3 style={{ color: s.gold, fontSize: 14, marginBottom: 16 }}>Расчётные остатки по каталогу</h3>
+                      {products.length === 0
+                        ? <div style={{ color: s.muted, fontSize: 13 }}>Добавьте товары в каталог (вкладка Склад)</div>
+                        : <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                            <thead>
+                              <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                                {["Товар","Ед.","Закуплено","Израсходовано","Расчётный остаток"].map((h) => (
+                                  <th key={h} style={{ padding: "8px 12px", textAlign: "left", color: s.muted, fontWeight: 600, fontSize: 12 }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {products.map((p) => {
+                                const st = getProductStock(p);
+                                return (
+                                  <tr key={p.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                                    <td style={{ padding: "10px 12px", fontWeight: 600 }}>{p.name}</td>
+                                    <td style={{ padding: "10px 12px", color: s.muted }}>{p.unit}</td>
+                                    <td style={{ padding: "10px 12px", color: "#81c784" }}>{st.purchased > 0 ? fromBase(st.purchased, st.base) : "—"}</td>
+                                    <td style={{ padding: "10px 12px", color: "#e57373" }}>{st.consumed > 0 ? fromBase(st.consumed, st.base) : "—"}</td>
+                                    <td style={{ padding: "10px 12px" }}>
+                                      <span style={{ color: st.stock >= 0 ? s.gold : "#e57373", fontWeight: 700 }}>
+                                        {fromBase(Math.abs(st.stock), st.base)}{st.stock < 0 ? " ⚠️" : ""}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                      }
                     </div>
                   )}
 
@@ -1625,33 +1818,38 @@ export default function Dashboard() {
                         <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 6 }}>Ревизия склада</h2>
                         <p style={{ color: s.muted, fontSize: 13, marginBottom: 20 }}>Введите фактическое количество каждого ингредиента</p>
 
-                        {stockEntries.length === 0
-                          ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Нет ингредиентов в тех картах</div>
-                          : stockEntries.map(([name, { base, expected }]) => (
-                              <div key={name} style={{ marginBottom: 14 }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                                  <label style={{ color: s.text, fontSize: 13, fontWeight: 600 }}>{name}</label>
-                                  <span style={{ color: s.muted, fontSize: 12 }}>расчётно: {fromBase(Math.max(0, expected), base)}</span>
+                        {products.length === 0
+                          ? <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+                              Добавьте товары в каталог (вкладка Склад), чтобы проводить ревизию
+                            </div>
+                          : products.map((p) => {
+                              const st = getProductStock(p);
+                              const actual = revisionActuals[p.name];
+                              const actualNum = parseFloat(actual || "0");
+                              const diff = actualNum - Math.max(0, st.stock);
+                              return (
+                                <div key={p.id} style={{ marginBottom: 14 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                    <label style={{ color: s.text, fontSize: 13, fontWeight: 600 }}>{p.name}</label>
+                                    <span style={{ color: s.muted, fontSize: 12 }}>расчётно: {fromBase(Math.max(0, st.stock), st.base)}</span>
+                                  </div>
+                                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                    <input
+                                      type="number" min="0" placeholder="0"
+                                      value={actual || ""}
+                                      onChange={(e) => setRevisionActuals((prev) => ({ ...prev, [p.name]: e.target.value }))}
+                                      style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${actual ? s.gold : s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 14, outline: "none" }}
+                                    />
+                                    <span style={{ color: s.muted, fontSize: 13, minWidth: 30 }}>{st.base}</span>
+                                    {actual && (
+                                      <span style={{ fontSize: 12, fontWeight: 700, minWidth: 70, textAlign: "right", color: diff >= 0 ? "#81c784" : "#e57373" }}>
+                                        {diff >= 0 ? `+${fromBase(diff, st.base)}` : `−${fromBase(Math.abs(diff), st.base)}`}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                  <input
-                                    type="number" min="0" placeholder="0"
-                                    value={revisionActuals[name] || ""}
-                                    onChange={(e) => setRevisionActuals((prev) => ({ ...prev, [name]: e.target.value }))}
-                                    style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${revisionActuals[name] ? s.gold : s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 14, outline: "none" }}
-                                  />
-                                  <span style={{ color: s.muted, fontSize: 13, minWidth: 30 }}>{base}</span>
-                                  {revisionActuals[name] && (
-                                    <span style={{
-                                      fontSize: 12, fontWeight: 700, minWidth: 60, textAlign: "right",
-                                      color: parseFloat(revisionActuals[name]) >= expected * 0.9 ? "#81c784" : "#e57373"
-                                    }}>
-                                      {parseFloat(revisionActuals[name]) >= expected ? "✓" : `−${fromBase(expected - parseFloat(revisionActuals[name]), base)}`}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            ))
+                              );
+                            })
                         }
 
                         <div style={{ marginTop: 16, marginBottom: 20 }}>
@@ -1782,6 +1980,133 @@ export default function Dashboard() {
               </button>
               <button onClick={() => setShowUserModal(false)}
                 style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "10px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Modal */}
+      {showProductModal && (() => {
+        const PROD_CATS = ["ингредиент", "упаковка", "прочее"];
+        const UNIT_OPTIONS: Record<string, string[]> = {
+          "ингредиент": ["г","кг","мл","л","шт"],
+          "упаковка": ["шт","уп"],
+          "прочее": ["шт","уп","г","кг"],
+        };
+        return (
+          <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+            <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: 400 }}>
+              <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 20 }}>{editingProduct ? "Редактировать" : "Добавить товар"}</h2>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Название *</label>
+                <input value={productForm.name} onChange={(e) => setProductForm((f) => ({ ...f, name: e.target.value }))} placeholder="Мука, Крем-чиз, Коробка..."
+                  style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Категория</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {PROD_CATS.map((c) => (
+                    <button key={c} onClick={() => setProductForm((f) => ({ ...f, category: c, unit: UNIT_OPTIONS[c][0] }))}
+                      style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${productForm.category === c ? s.gold : s.border}`, background: productForm.category === c ? s.gold + "22" : "none", color: productForm.category === c ? s.gold : s.muted, fontSize: 13, cursor: "pointer", fontWeight: productForm.category === c ? 700 : 400 }}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Единица измерения</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {(UNIT_OPTIONS[productForm.category] || ["шт"]).map((u) => (
+                    <button key={u} onClick={() => setProductForm((f) => ({ ...f, unit: u }))}
+                      style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${productForm.unit === u ? s.gold : s.border}`, background: productForm.unit === u ? s.gold + "22" : "none", color: productForm.unit === u ? s.gold : s.muted, fontSize: 13, cursor: "pointer", fontWeight: productForm.unit === u ? 700 : 400 }}>
+                      {u}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Заметки</label>
+                <input value={productForm.notes} onChange={(e) => setProductForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Поставщик, бренд..."
+                  style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+              </div>
+
+              <div style={{ display: "flex", gap: 12 }}>
+                <button onClick={saveProduct} disabled={!productForm.name}
+                  style={{ flex: 2, backgroundColor: productForm.name ? s.gold : s.border, border: "none", borderRadius: 8, padding: "10px", color: productForm.name ? "#0f0e0c" : s.muted, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                  {editingProduct ? "Сохранить" : "Добавить"}
+                </button>
+                <button onClick={() => setShowProductModal(false)}
+                  style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "10px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Приход Modal */}
+      {showPrihodModal && prihodProduct && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+          <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 28, width: 400 }}>
+            <h2 style={{ color: s.gold, fontSize: 16, marginBottom: 4 }}>Приход товара</h2>
+            <div style={{ color: "#81c784", fontSize: 14, fontWeight: 700, marginBottom: 20 }}>{prihodProduct.name}</div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+              <div>
+                <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Количество ({prihodProduct.unit}) *</label>
+                <input type="number" min="0" placeholder="0" value={prihodForm.quantity}
+                  onChange={(e) => setPrihodForm((f) => ({ ...f, quantity: e.target.value }))} autoFocus
+                  style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${prihodForm.quantity ? s.gold : s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 16, fontWeight: 700, outline: "none", boxSizing: "border-box", textAlign: "center" }} />
+              </div>
+              <div>
+                <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Сумма (₸) *</label>
+                <input type="number" min="0" placeholder="0" value={prihodForm.amount}
+                  onChange={(e) => setPrihodForm((f) => ({ ...f, amount: e.target.value }))}
+                  style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${prihodForm.amount ? s.gold : s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 16, fontWeight: 700, outline: "none", boxSizing: "border-box", textAlign: "center" }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 8 }}>Тип оплаты</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["нал","каспи","со счёта ИП"].map((pt) => (
+                  <button key={pt} onClick={() => setPrihodForm((f) => ({ ...f, payment_type: pt }))}
+                    style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${prihodForm.payment_type === pt ? s.gold : s.border}`, background: prihodForm.payment_type === pt ? s.gold + "22" : "none", color: prihodForm.payment_type === pt ? s.gold : s.muted, fontSize: 12, cursor: "pointer", fontWeight: prihodForm.payment_type === pt ? 700 : 400 }}>
+                    {pt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 4 }}>Дата</label>
+              <input type="date" value={prihodForm.date} onChange={(e) => setPrihodForm((f) => ({ ...f, date: e.target.value }))}
+                style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
+            </div>
+
+            {prihodForm.quantity && prihodForm.amount && (
+              <div style={{ backgroundColor: s.bg, borderRadius: 8, padding: "10px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                <span style={{ color: s.muted }}>Цена за {prihodProduct.unit}</span>
+                <span style={{ color: s.gold, fontWeight: 700 }}>
+                  {(parseFloat(prihodForm.amount) / parseFloat(prihodForm.quantity)).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₸
+                </span>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 12 }}>
+              <button onClick={savePrihod} disabled={savingPrihod || !prihodForm.quantity || !prihodForm.amount}
+                style={{ flex: 2, backgroundColor: (!prihodForm.quantity || !prihodForm.amount) ? s.border : "#81c784", border: "none", borderRadius: 8, padding: "11px", color: (!prihodForm.quantity || !prihodForm.amount) ? s.muted : "#0f0e0c", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+                {savingPrihod ? "Сохранение..." : "Записать приход"}
+              </button>
+              <button onClick={() => setShowPrihodModal(false)}
+                style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 8, padding: "11px", color: s.muted, cursor: "pointer", fontSize: 14 }}>
                 Отмена
               </button>
             </div>
