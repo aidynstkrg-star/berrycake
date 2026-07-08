@@ -88,6 +88,15 @@ export default function Dashboard() {
   const [revisionNotes, setRevisionNotes] = useState("");
   const [savingRevision, setSavingRevision] = useState(false);
 
+  // Flavors & accessories management
+  const [dbFlavors, setDbFlavors] = useState<any[]>([]);
+  const [newFlavorName, setNewFlavorName] = useState("");
+  const [savingFlavor, setSavingFlavor] = useState(false);
+  const [dbAccessories, setDbAccessories] = useState<any[]>([]);
+  const [newAccName, setNewAccName] = useState("");
+  const [newAccPrice, setNewAccPrice] = useState("");
+  const [savingAcc, setSavingAcc] = useState(false);
+
   // Unit normalization helpers
   const toBaseUnit = (amount: number, unit: string): { val: number; base: string } => {
     const u = (unit || "г").toLowerCase().trim();
@@ -177,6 +186,54 @@ export default function Dashboard() {
   const fetchProducts = async () => {
     const { data } = await supabase.from("berrycake_products").select("*").order("category").order("name");
     if (data) setProducts(data);
+  };
+
+  const fetchFlavors = async () => {
+    const { data } = await supabase.from("berrycake_flavors").select("*").order("sort_order");
+    if (data) setDbFlavors(data);
+  };
+
+  const addFlavor = async () => {
+    if (!newFlavorName.trim()) return;
+    setSavingFlavor(true);
+    const maxOrder = dbFlavors.reduce((m, f) => Math.max(m, f.sort_order || 0), 0);
+    await supabase.from("berrycake_flavors").insert({ name: newFlavorName.trim().toUpperCase(), active: true, sort_order: maxOrder + 1 });
+    setNewFlavorName("");
+    fetchFlavors();
+    setSavingFlavor(false);
+  };
+
+  const deleteFlavor = async (id: string) => {
+    await supabase.from("berrycake_flavors").delete().eq("id", id);
+    fetchFlavors();
+  };
+
+  const toggleFlavorActive = async (f: any) => {
+    await supabase.from("berrycake_flavors").update({ active: !f.active }).eq("id", f.id);
+    fetchFlavors();
+  };
+
+  const fetchAccessories = async () => {
+    const { data } = await supabase.from("berrycake_accessories").select("*").order("sort_order");
+    if (data) setDbAccessories(data);
+  };
+
+  const addAccessory = async () => {
+    if (!newAccName.trim()) return;
+    setSavingAcc(true);
+    const maxOrder = dbAccessories.reduce((m, a) => Math.max(m, a.sort_order || 0), 0);
+    await supabase.from("berrycake_accessories").insert({
+      name: newAccName.trim(), active: true, sort_order: maxOrder + 1,
+      price: newAccPrice ? parseFloat(newAccPrice) : null,
+    });
+    setNewAccName(""); setNewAccPrice("");
+    fetchAccessories();
+    setSavingAcc(false);
+  };
+
+  const deleteAccessory = async (id: string) => {
+    await supabase.from("berrycake_accessories").delete().eq("id", id);
+    fetchAccessories();
   };
 
   const saveProduct = async () => {
@@ -470,6 +527,8 @@ export default function Dashboard() {
     fetchProduction();
     fetchRevisions();
     fetchProducts();
+    fetchFlavors();
+    fetchAccessories();
 
     const channel = supabase.channel("orders_realtime")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "berrycake_orders" }, (payload) => {
@@ -1290,12 +1349,12 @@ export default function Dashboard() {
                             style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
                           />
                           {expDescSuggestions.length > 0 && (
-                            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: "#222", border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 20, overflow: "hidden", marginTop: 2 }}>
+                            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 20, overflow: "hidden", marginTop: 2 }}>
                               {expDescSuggestions.map((d) => (
                                 <div key={d} onClick={() => { setExpForm((f) => ({ ...f, description: d })); setExpDescSuggestions([]); }}
-                                  style={{ padding: "9px 14px", cursor: "pointer", fontSize: 13, borderBottom: `1px solid ${s.border}` }}
-                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = s.card}
-                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                                  style={{ padding: "9px 14px", cursor: "pointer", fontSize: 13, borderBottom: `1px solid ${s.border}`, color: s.text }}
+                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = s.bg}
+                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = s.card}>
                                   {d}
                                 </div>
                               ))}
@@ -1501,6 +1560,64 @@ export default function Dashboard() {
                   <div style={{ color: s.text, fontWeight: 700, fontSize: 18 }}>{user?.name}</div>
                   <div style={{ color: s.muted, fontSize: 13, marginTop: 2 }}>{user?.role}</div>
                 </div>
+              </div>
+            </div>
+
+            {/* Вкусы */}
+            <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+              <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 20 }}>Вкусы / продукты</h2>
+              <div style={{ marginBottom: 16 }}>
+                {dbFlavors.map((f) => (
+                  <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${s.border}` }}>
+                    <span style={{ color: f.active ? s.text : s.muted, fontWeight: 600, fontSize: 14 }}>{f.name}</span>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => toggleFlavorActive(f)}
+                        style={{ background: "none", border: `1px solid ${s.border}`, color: f.active ? "#81c784" : s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>
+                        {f.active ? "Активен" : "Скрыт"}
+                      </button>
+                      <button onClick={() => { if (confirm("Удалить вкус?")) deleteFlavor(f.id); }}
+                        style={{ background: "none", border: "1px solid #e5737444", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <input placeholder="Новый вкус (напр. ФИСТАШКА)" value={newFlavorName} onChange={(e) => setNewFlavorName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addFlavor()}
+                  style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none" }} />
+                <button onClick={addFlavor} disabled={!newFlavorName.trim() || savingFlavor}
+                  style={{ backgroundColor: newFlavorName.trim() ? s.gold : s.border, border: "none", borderRadius: 8, padding: "9px 18px", color: newFlavorName.trim() ? "#fff" : s.muted, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  + Добавить
+                </button>
+              </div>
+            </div>
+
+            {/* Прочее (аксессуары) */}
+            <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+              <h2 style={{ color: s.gold, fontSize: 15, marginBottom: 20 }}>Прочее / аксессуары</h2>
+              <p style={{ color: s.muted, fontSize: 13, marginBottom: 16 }}>Позиции, доступные в разделе «Прочее» кассы</p>
+              <div style={{ marginBottom: 16 }}>
+                {dbAccessories.map((a) => (
+                  <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${s.border}` }}>
+                    <div>
+                      <span style={{ color: s.text, fontWeight: 600, fontSize: 14 }}>{a.name}</span>
+                      {a.price && <span style={{ color: s.muted, fontSize: 12, marginLeft: 10 }}>{Number(a.price).toLocaleString("ru-RU")} ₸</span>}
+                    </div>
+                    <button onClick={() => { if (confirm("Удалить позицию?")) deleteAccessory(a.id); }}
+                      style={{ background: "none", border: "1px solid #e5737444", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
+                  </div>
+                ))}
+                {dbAccessories.length === 0 && <div style={{ color: s.muted, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Нет позиций</div>}
+              </div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                <input placeholder="Название (Коробка, Свечи...)" value={newAccName} onChange={(e) => setNewAccName(e.target.value)}
+                  style={{ flex: 2, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none" }} />
+                <input placeholder="Цена ₸" inputMode="numeric" value={newAccPrice} onChange={(e) => setNewAccPrice(e.target.value.replace(/\D/g, ""))}
+                  style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13, outline: "none" }} />
+                <button onClick={addAccessory} disabled={!newAccName.trim() || savingAcc}
+                  style={{ backgroundColor: newAccName.trim() ? s.gold : s.border, border: "none", borderRadius: 8, padding: "9px 18px", color: newAccName.trim() ? "#fff" : s.muted, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  +
+                </button>
               </div>
             </div>
 
@@ -2424,13 +2541,13 @@ export default function Dashboard() {
                 style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 12px", color: s.text, fontSize: 13, outline: "none", boxSizing: "border-box" }}
               />
               {addClientSuggestions.length > 0 && (
-                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: "#222", border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 10, overflow: "hidden", marginTop: 2 }}>
+                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, zIndex: 10, overflow: "hidden", marginTop: 2 }}>
                   {addClientSuggestions.map((c) => (
                     <div key={c.id}
                       onClick={() => { setAddForm((f) => ({ ...f, client_name: c.name, phone: c.phone || "" })); setAddClientQuery(c.name); setAddClientSuggestions([]); }}
-                      style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${s.border}`, fontSize: 13 }}
-                      onMouseEnter={e => e.currentTarget.style.backgroundColor = s.card}
-                      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                      style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${s.border}`, fontSize: 13, color: s.text }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = s.bg}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = s.card}>
                       <span style={{ color: s.gold, fontWeight: 600 }}>{c.name}</span>
                       {c.phone && <span style={{ color: s.muted, fontSize: 12, marginLeft: 10 }}>{c.phone}</span>}
                     </div>
