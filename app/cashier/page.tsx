@@ -9,15 +9,8 @@ const supabase = createClient(
 );
 
 const s = { bg: "#f5f5f3", card: "#ffffff", gold: "#111827", text: "#111827", muted: "#6b7280", border: "#e5e7eb" };
-
 const SIZES = ["S", "M", "L", "Другое"];
-
-const STATUS_FLOW: Record<string, string> = {
-  new: "in_progress",
-  in_progress: "done",
-  done: "delivered",
-};
-
+const STATUS_FLOW: Record<string, string> = { new: "in_progress", in_progress: "done", done: "delivered" };
 const STATUSES: Record<string, { label: string; color: string }> = {
   new: { label: "Новый", color: "#c8a96e" },
   in_progress: { label: "В работе", color: "#64b5f6" },
@@ -26,6 +19,23 @@ const STATUSES: Record<string, { label: string; color: string }> = {
   cancellation_requested: { label: "Запрос отмены", color: "#ff9800" },
   cancelled: { label: "Отменён", color: "#e57373" },
 };
+
+// Inline SVG icons — no emoji
+const IconCake = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/><path d="M7 8v3"/><path d="M12 8v3"/><path d="M17 8v3"/><path d="M7 4h0.01"/><path d="M12 4h0.01"/><path d="M17 4h0.01"/>
+  </svg>
+);
+const IconLogout = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+  </svg>
+);
+const IconCheck = () => (
+  <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#81c784" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/>
+  </svg>
+);
 
 export default function CashierPage() {
   const router = useRouter();
@@ -55,6 +65,9 @@ export default function CashierPage() {
   const [accessoryAmount, setAccessoryAmount] = useState("");
   const [accessorySaving, setAccessorySaving] = useState(false);
   const [accessoryDone, setAccessoryDone] = useState(false);
+
+  // Orders filter
+  const [orderFilter, setOrderFilter] = useState("all");
 
   // Data
   const [clients, setClients] = useState<any[]>([]);
@@ -133,19 +146,27 @@ export default function CashierPage() {
     } finally { setSaving(false); }
   };
 
+  // Auto-calculate accessories total
+  const accessoryTotal = Object.entries(accessoryQtys).reduce((sum, [name, qty]) => {
+    if (qty <= 0) return sum;
+    const acc = accessories.find((a) => a.name === name);
+    return sum + (acc?.price ? acc.price * qty : 0);
+  }, 0);
+
   const saveAccessoryOrder = async () => {
     const items = Object.entries(accessoryQtys).filter(([, q]) => q > 0);
     if (!items.length) return;
     setAccessorySaving(true);
     try {
       const itemStr = items.map(([name, qty]) => `${name} ×${qty}`).join(", ");
+      const total = accessoryAmount ? Number(accessoryAmount) : (accessoryTotal > 0 ? accessoryTotal : null);
       await supabase.from("berrycake_orders").insert({
         client_name: accessoryClient || "Физ. лицо",
         cake_flavor: "прочее",
         quantity: items.reduce((s, [, q]) => s + q, 0),
         order_date: new Date().toISOString().slice(0, 10),
         status: "done",
-        total_amount: accessoryAmount ? Number(accessoryAmount) : null,
+        total_amount: total,
         payment_type: "наличные",
         notes: itemStr,
       });
@@ -178,35 +199,46 @@ export default function CashierPage() {
   if (!user) return null;
 
   const hasAccessoryItems = Object.values(accessoryQtys).some((q) => q > 0);
+  const pendingCancel = myOrders.filter((o) => o.status === "cancellation_requested").length;
+
+  const filteredOrders = orderFilter === "all"
+    ? myOrders
+    : myOrders.filter((o) => (o.status || "new") === orderFilter);
+
+  const btnBase: React.CSSProperties = {
+    border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    transition: "all 0.15s", display: "inline-flex", alignItems: "center", justifyContent: "center",
+  };
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: s.bg, color: s.text, fontFamily: "'Inter', -apple-system, sans-serif" }}>
       {/* Header */}
       <div style={{ backgroundColor: s.card, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 22 }}>🍰</span>
-          <span style={{ color: s.gold, fontWeight: 700, fontSize: 16 }}>BerryCake — Касса</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: s.gold }}>
+          <IconCake />
+          <span style={{ fontWeight: 700, fontSize: 16 }}>BerryCake — Касса</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ color: s.muted, fontSize: 13 }}>{user.name}</span>
           <button onClick={() => { localStorage.removeItem("bc_auth"); router.replace("/login"); }}
-            style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: "5px 12px", borderRadius: 8, cursor: "pointer", fontSize: 12 }}>
-            Выйти
+            style={{ ...btnBase, gap: 6, background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: "5px 12px", borderRadius: 8, fontSize: 12 }}>
+            <IconLogout /> Выйти
           </button>
         </div>
       </div>
 
       {/* Main tabs */}
       <div style={{ display: "flex", borderBottom: `1px solid ${s.border}`, backgroundColor: s.card }}>
-        {([["new", "Торты 🎂"], ["accessories", "Прочее 🎁"], ["orders", "Мои заказы"]] as const).map(([key, label]) => (
+        {([["new", "Торты"], ["accessories", "Прочее"], ["orders", "Мои заказы"]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setMainTab(key as any)}
-            style={{ flex: 1, padding: "13px 8px", background: "none", border: "none", cursor: "pointer",
+            style={{ ...btnBase, flex: 1, padding: "13px 8px", background: "none",
               color: mainTab === key ? s.gold : s.muted, fontWeight: mainTab === key ? 700 : 400,
-              fontSize: 13, borderBottom: mainTab === key ? `2px solid ${s.gold}` : "2px solid transparent" }}>
+              fontSize: 13, borderBottom: mainTab === key ? `2px solid ${s.gold}` : "2px solid transparent",
+              position: "relative" }}>
             {label}
-            {key === "orders" && myOrders.filter((o) => o.status === "cancellation_requested").length > 0 && (
-              <span style={{ marginLeft: 5, backgroundColor: "#ff9800", color: "#000", borderRadius: "50%", fontSize: 10, padding: "1px 5px", fontWeight: 700 }}>
-                {myOrders.filter((o) => o.status === "cancellation_requested").length}
+            {key === "orders" && pendingCancel > 0 && (
+              <span style={{ marginLeft: 5, backgroundColor: "#ff9800", color: "#fff", borderRadius: "50%", fontSize: 10, padding: "1px 5px", fontWeight: 700, display: "inline-block" }}>
+                {pendingCancel}
               </span>
             )}
           </button>
@@ -219,31 +251,39 @@ export default function CashierPage() {
         {mainTab === "new" && (
           <>
             {done ? (
-              <div style={{ textAlign: "center", padding: "60px 0" }}>
-                <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+              <div style={{ textAlign: "center", padding: "60px 0", animation: "fadeIn 0.2s ease" }}>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><IconCheck /></div>
                 <h2 style={{ color: s.gold, fontSize: 24, marginBottom: 8 }}>Заказ принят!</h2>
                 <p style={{ color: s.muted, fontSize: 14, marginBottom: 32, lineHeight: 2 }}>
                   {finalFlavor} · {quantity} шт{finalSize ? ` · ${finalSize}` : ""}<br />
                   {isWalkIn ? (walkInName || "Физ. лицо") : selectedClient?.name}
                 </p>
                 <button onClick={reset}
-                  style={{ backgroundColor: s.gold, border: "none", borderRadius: 12, padding: "14px 40px", color: "#ffffff", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>
+                  style={{ ...btnBase, backgroundColor: s.gold, borderRadius: 12, padding: "14px 40px", color: "#ffffff", fontWeight: 700, fontSize: 16 }}>
                   Новый заказ
                 </button>
               </div>
             ) : (
               <>
-                {/* Progress */}
+                {/* Progress — clickable for completed steps */}
                 <div style={{ display: "flex", gap: 6, marginBottom: 32 }}>
                   {["Вкус", "Клиент", "Кол-во", "Размер"].map((label, i) => (
-                    <div key={i} style={{ flex: 1, textAlign: "center" }}>
-                      <div style={{ height: 4, borderRadius: 2, marginBottom: 6, backgroundColor: i <= step ? s.gold : s.border, transition: "background-color 0.2s" }} />
-                      <span style={{ fontSize: 10, color: i === step ? s.gold : s.muted }}>{label}</span>
+                    <div key={i} onClick={() => i < step && setStep(i)}
+                      style={{ flex: 1, textAlign: "center", cursor: i < step ? "pointer" : "default" }}>
+                      <div style={{ height: 4, borderRadius: 2, marginBottom: 6,
+                        backgroundColor: i <= step ? s.gold : s.border,
+                        transition: "background-color 0.2s",
+                        opacity: i < step ? 0.6 : 1 }} />
+                      <span style={{ fontSize: 12, color: i === step ? s.gold : s.muted,
+                        fontWeight: i === step ? 600 : 400,
+                        textDecoration: i < step ? "underline dotted" : "none" }}>
+                        {label}
+                      </span>
                     </div>
                   ))}
                 </div>
 
-                {/* Step 0: Flavor (multi-select) */}
+                {/* Step 0: Flavor */}
                 {step === 0 && (
                   <div>
                     <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 6, textAlign: "center" }}>Выберите вкус(ы)</h2>
@@ -253,18 +293,19 @@ export default function CashierPage() {
                         const sel = flavors.includes(f);
                         return (
                           <button key={f} onClick={() => toggleFlavor(f)}
-                            style={{ backgroundColor: sel ? s.gold : s.card, border: `2px solid ${sel ? s.gold : s.border}`,
-                              borderRadius: 14, padding: "18px 10px", cursor: "pointer", color: sel ? "#ffffff" : s.text,
+                            style={{ ...btnBase, backgroundColor: sel ? s.gold : s.card, border: `2px solid ${sel ? s.gold : s.border}`,
+                              borderRadius: 14, padding: "18px 10px", color: sel ? "#ffffff" : s.text,
                               fontSize: 12, fontWeight: 700, textAlign: "center", lineHeight: 1.3, minHeight: 70,
-                              transition: "all 0.15s", position: "relative" }}>
+                              position: "relative", flexDirection: "column" }}>
                             {sel && <span style={{ position: "absolute", top: 5, right: 8, fontSize: 13 }}>✓</span>}
                             {f}
                           </button>
                         );
                       })}
                       <button onClick={() => setShowCustom((v) => !v)}
-                        style={{ backgroundColor: showCustom ? "#11182722" : s.card, border: `2px dashed ${showCustom ? s.gold : s.border}`,
-                          borderRadius: 14, padding: "18px 10px", cursor: "pointer", color: showCustom ? s.gold : s.muted,
+                        style={{ ...btnBase, backgroundColor: showCustom ? "#11182715" : s.card,
+                          border: `2px dashed ${showCustom ? s.gold : s.border}`,
+                          borderRadius: 14, padding: "18px 10px", color: showCustom ? s.gold : s.muted,
                           fontSize: 12, minHeight: 70 }}>
                         + Другой
                       </button>
@@ -281,8 +322,8 @@ export default function CashierPage() {
                       </div>
                     )}
                     <button onClick={() => setStep(1)} disabled={!finalFlavor}
-                      style={{ width: "100%", backgroundColor: finalFlavor ? s.gold : s.border, border: "none", borderRadius: 12, padding: "14px",
-                        color: finalFlavor ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16, cursor: finalFlavor ? "pointer" : "default" }}>
+                      style={{ ...btnBase, width: "100%", backgroundColor: finalFlavor ? s.gold : s.border, borderRadius: 12, padding: "14px",
+                        color: finalFlavor ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16 }}>
                       Далее →
                     </button>
                   </div>
@@ -295,7 +336,7 @@ export default function CashierPage() {
                     {!isWalkIn ? (
                       <>
                         <div style={{ position: "relative", marginBottom: 12 }}>
-                          <input autoFocus placeholder="🔍 Поиск по имени или телефону..."
+                          <input autoFocus placeholder="Поиск по имени или телефону..."
                             value={clientQuery} onChange={(e) => { setClientQuery(e.target.value); setSelectedClient(null); }}
                             style={{ width: "100%", backgroundColor: s.card, border: `1px solid ${selectedClient ? s.gold : s.border}`,
                               borderRadius: 10, padding: "12px 16px", color: s.text, fontSize: 15, outline: "none", boxSizing: "border-box" }} />
@@ -304,9 +345,7 @@ export default function CashierPage() {
                               borderRadius: 10, zIndex: 10, overflow: "hidden", marginTop: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.1)" }}>
                               {clientSuggestions.map((c) => (
                                 <div key={c.id} onClick={() => { setSelectedClient(c); setClientQuery(c.name); setClientSuggestions([]); }}
-                                  style={{ padding: "12px 16px", cursor: "pointer", borderBottom: `1px solid ${s.border}`, fontSize: 14, color: s.text }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = s.bg}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = s.card}>
+                                  style={{ padding: "12px 16px", cursor: "pointer", borderBottom: `1px solid ${s.border}`, fontSize: 14, color: s.text, backgroundColor: s.card }}>
                                   <span style={{ color: s.gold, fontWeight: 600 }}>{c.name}</span>
                                   {c.phone && <span style={{ color: s.muted, fontSize: 12, marginLeft: 10 }}>{c.phone}</span>}
                                   <span style={{ color: s.muted, fontSize: 11, marginLeft: 10, backgroundColor: s.bg, padding: "1px 6px", borderRadius: 4 }}>{c.client_type}</span>
@@ -323,14 +362,14 @@ export default function CashierPage() {
                           </div>
                         )}
                         <button onClick={() => setIsWalkIn(true)}
-                          style={{ width: "100%", background: "none", border: `1px dashed ${s.border}`, borderRadius: 10, padding: "12px", color: s.muted, cursor: "pointer", fontSize: 14, marginBottom: 16 }}>
+                          style={{ ...btnBase, width: "100%", background: "none", border: `1px dashed ${s.border}`, borderRadius: 10, padding: "12px", color: s.muted, fontSize: 14, marginBottom: 16 }}>
                           Физ. лицо / разовый заказ
                         </button>
                         <div style={{ display: "flex", gap: 12 }}>
-                          <button onClick={() => setStep(0)} style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 12, padding: "14px", color: s.muted, cursor: "pointer", fontSize: 15 }}>← Назад</button>
+                          <button onClick={() => setStep(0)} style={{ ...btnBase, flex: 1, backgroundColor: s.border, borderRadius: 12, padding: "14px", color: s.muted, fontSize: 15 }}>← Назад</button>
                           <button onClick={() => setStep(2)} disabled={!selectedClient}
-                            style={{ flex: 2, backgroundColor: selectedClient ? s.gold : s.border, border: "none", borderRadius: 12, padding: "14px",
-                              color: selectedClient ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16, cursor: selectedClient ? "pointer" : "default" }}>
+                            style={{ ...btnBase, flex: 2, backgroundColor: selectedClient ? s.gold : s.border, borderRadius: 12, padding: "14px",
+                              color: selectedClient ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16 }}>
                             Далее →
                           </button>
                         </div>
@@ -342,42 +381,64 @@ export default function CashierPage() {
                         <input placeholder="Сумма заказа (₸)" value={walkInAmount} onChange={(e) => setWalkInAmount(e.target.value.replace(/\D/g, ""))} inputMode="numeric"
                           style={{ width: "100%", backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 10, padding: "12px 16px", color: s.text, fontSize: 15, outline: "none", boxSizing: "border-box", marginBottom: 20 }} />
                         <div style={{ display: "flex", gap: 12 }}>
-                          <button onClick={() => setIsWalkIn(false)} style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 12, padding: "14px", color: s.muted, cursor: "pointer", fontSize: 15 }}>← Назад</button>
-                          <button onClick={() => setStep(2)} style={{ flex: 2, backgroundColor: s.gold, border: "none", borderRadius: 12, padding: "14px", color: "#ffffff", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>Далее →</button>
+                          <button onClick={() => setIsWalkIn(false)} style={{ ...btnBase, flex: 1, backgroundColor: s.border, borderRadius: 12, padding: "14px", color: s.muted, fontSize: 15 }}>← Назад</button>
+                          <button onClick={() => setStep(2)} style={{ ...btnBase, flex: 2, backgroundColor: s.gold, borderRadius: 12, padding: "14px", color: "#ffffff", fontWeight: 700, fontSize: 16 }}>Далее →</button>
                         </div>
                       </>
                     )}
                   </div>
                 )}
 
-                {/* Step 2: Quantity */}
+                {/* Step 2: Quantity — input field + stepper */}
                 {step === 2 && (
                   <div style={{ textAlign: "center" }}>
                     <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 32 }}>Количество</h2>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 28, marginBottom: 48 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 48 }}>
                       <button onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                        style={{ width: 64, height: 64, borderRadius: "50%", backgroundColor: s.card, border: `2px solid ${s.border}`, color: s.text, fontSize: 28, cursor: "pointer" }}>−</button>
-                      <span style={{ color: s.gold, fontSize: 64, fontWeight: 700, minWidth: 80 }}>{quantity}</span>
+                        style={{ ...btnBase, width: 56, height: 56, borderRadius: "50%", backgroundColor: s.card, border: `2px solid ${s.border}`, color: s.text, fontSize: 28 }}>
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        inputMode="numeric"
+                        value={quantity}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value);
+                          if (!isNaN(v) && v >= 1) setQuantity(v);
+                          else if (e.target.value === "") setQuantity(1);
+                        }}
+                        style={{
+                          width: 100, textAlign: "center", fontSize: 52, fontWeight: 700,
+                          color: s.gold, backgroundColor: "transparent", border: "none",
+                          outline: "none", fontFamily: "'Inter', sans-serif",
+                          borderBottom: `2px solid ${s.border}`, padding: "4px 0",
+                          appearance: "textfield",
+                        }}
+                      />
                       <button onClick={() => setQuantity((q) => q + 1)}
-                        style={{ width: 64, height: 64, borderRadius: "50%", backgroundColor: s.card, border: `2px solid ${s.gold}`, color: s.gold, fontSize: 28, cursor: "pointer" }}>+</button>
+                        style={{ ...btnBase, width: 56, height: 56, borderRadius: "50%", backgroundColor: s.card, border: `2px solid ${s.gold}`, color: s.gold, fontSize: 28 }}>
+                        +
+                      </button>
                     </div>
                     <div style={{ display: "flex", gap: 12 }}>
-                      <button onClick={() => setStep(1)} style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 12, padding: "14px", color: s.muted, cursor: "pointer", fontSize: 15 }}>← Назад</button>
-                      <button onClick={() => setStep(3)} style={{ flex: 2, backgroundColor: s.gold, border: "none", borderRadius: 12, padding: "14px", color: "#ffffff", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>Далее →</button>
+                      <button onClick={() => setStep(1)} style={{ ...btnBase, flex: 1, backgroundColor: s.border, borderRadius: 12, padding: "14px", color: s.muted, fontSize: 15 }}>← Назад</button>
+                      <button onClick={() => setStep(3)} style={{ ...btnBase, flex: 2, backgroundColor: s.gold, borderRadius: 12, padding: "14px", color: "#ffffff", fontWeight: 700, fontSize: 16 }}>Далее →</button>
                     </div>
                   </div>
                 )}
 
-                {/* Step 3: Size + confirm */}
+                {/* Step 3: Size (optional) + confirm */}
                 {step === 3 && (
                   <div>
-                    <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 20, textAlign: "center" }}>Размер</h2>
+                    <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 8, textAlign: "center" }}>Размер</h2>
+                    <p style={{ color: s.muted, fontSize: 13, textAlign: "center", marginBottom: 16 }}>Необязательно — можно пропустить</p>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
                       {SIZES.map((sz) => (
-                        <button key={sz} onClick={() => { setSize(sz); if (sz !== "Другое") setCustomSize(""); }}
-                          style={{ backgroundColor: size === sz ? s.gold : s.card, border: `2px solid ${size === sz ? s.gold : s.border}`,
-                            borderRadius: 14, padding: "24px 8px", cursor: "pointer", color: size === sz ? "#ffffff" : s.text,
-                            fontSize: 18, fontWeight: 700, minHeight: 80, transition: "all 0.15s" }}>
+                        <button key={sz} onClick={() => { setSize(size === sz ? null : sz); if (sz !== "Другое") setCustomSize(""); }}
+                          style={{ ...btnBase, backgroundColor: size === sz ? s.gold : s.card, border: `2px solid ${size === sz ? s.gold : s.border}`,
+                            borderRadius: 14, padding: "24px 8px", color: size === sz ? "#ffffff" : s.text,
+                            fontSize: 18, fontWeight: 700, minHeight: 80 }}>
                           {sz}
                         </button>
                       ))}
@@ -402,11 +463,11 @@ export default function CashierPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 12 }}>
-                      <button onClick={() => setStep(2)} style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 12, padding: "14px", color: s.muted, cursor: "pointer", fontSize: 15 }}>← Назад</button>
-                      <button onClick={saveOrder} disabled={saving || !size || (size === "Другое" && !customSize)}
-                        style={{ flex: 2, backgroundColor: (saving || !size || (size === "Другое" && !customSize)) ? s.border : "#4caf50",
-                          border: "none", borderRadius: 12, padding: "14px", fontWeight: 700, fontSize: 16, cursor: "pointer",
-                          color: (saving || !size || (size === "Другое" && !customSize)) ? s.muted : "#fff" }}>
+                      <button onClick={() => setStep(2)} style={{ ...btnBase, flex: 1, backgroundColor: s.border, borderRadius: 12, padding: "14px", color: s.muted, fontSize: 15 }}>← Назад</button>
+                      <button onClick={saveOrder} disabled={saving || (size === "Другое" && !customSize)}
+                        style={{ ...btnBase, flex: 2, backgroundColor: (saving || (size === "Другое" && !customSize)) ? s.border : "#4caf50",
+                          borderRadius: 12, padding: "14px", fontWeight: 700, fontSize: 16,
+                          color: (saving || (size === "Другое" && !customSize)) ? s.muted : "#fff" }}>
                         {saving ? "Сохранение..." : "✓ Принять заказ"}
                       </button>
                     </div>
@@ -422,10 +483,10 @@ export default function CashierPage() {
           <div>
             {accessoryDone ? (
               <div style={{ textAlign: "center", padding: "60px 0" }}>
-                <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><IconCheck /></div>
                 <h2 style={{ color: s.gold, fontSize: 24, marginBottom: 24 }}>Продажа оформлена!</h2>
                 <button onClick={() => { setAccessoryDone(false); setAccessoryQtys({}); setAccessoryClient(""); setAccessoryAmount(""); }}
-                  style={{ backgroundColor: s.gold, border: "none", borderRadius: 12, padding: "14px 40px", color: "#ffffff", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>
+                  style={{ ...btnBase, backgroundColor: s.gold, borderRadius: 12, padding: "14px 40px", color: "#ffffff", fontWeight: 700, fontSize: 16 }}>
                   Новая продажа
                 </button>
               </div>
@@ -445,14 +506,14 @@ export default function CashierPage() {
                           padding: "14px 20px", borderBottom: i < accessories.length - 1 ? `1px solid ${s.border}` : "none" }}>
                           <div>
                             <div style={{ color: s.text, fontWeight: 600, fontSize: 15 }}>{acc.name}</div>
-                            {acc.price && <div style={{ color: s.muted, fontSize: 12 }}>{Number(acc.price).toLocaleString("ru-RU")} ₸</div>}
+                            {acc.price && <div style={{ color: s.muted, fontSize: 12 }}>{Number(acc.price).toLocaleString("ru-RU")} ₸/шт</div>}
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                             <button onClick={() => setAccessoryQtys((p) => ({ ...p, [acc.name]: Math.max(0, (p[acc.name] || 0) - 1) }))}
-                              style={{ width: 38, height: 38, borderRadius: "50%", border: `1px solid ${s.border}`, background: "none", color: s.text, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>−</button>
+                              style={{ ...btnBase, width: 44, height: 44, borderRadius: "50%", border: `1px solid ${s.border}`, background: "none", color: s.text, fontSize: 22 }}>−</button>
                             <span style={{ color: qty > 0 ? s.gold : s.muted, fontWeight: 700, fontSize: 20, minWidth: 28, textAlign: "center" }}>{qty}</span>
                             <button onClick={() => setAccessoryQtys((p) => ({ ...p, [acc.name]: (p[acc.name] || 0) + 1 }))}
-                              style={{ width: 38, height: 38, borderRadius: "50%", border: `1px solid ${s.gold}`, background: "none", color: s.gold, fontSize: 22, cursor: "pointer", lineHeight: 1 }}>+</button>
+                              style={{ ...btnBase, width: 44, height: 44, borderRadius: "50%", border: `1px solid ${s.gold}`, background: "none", color: s.gold, fontSize: 22 }}>+</button>
                           </div>
                         </div>
                       );
@@ -462,17 +523,27 @@ export default function CashierPage() {
 
                 {hasAccessoryItems && (
                   <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                    <div style={{ color: s.muted, fontSize: 11, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Выбрано: {Object.entries(accessoryQtys).filter(([, q]) => q > 0).map(([n, q]) => `${n} ×${q}`).join(", ")}</div>
+                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      {Object.entries(accessoryQtys).filter(([, q]) => q > 0).map(([n, q]) => `${n} ×${q}`).join(", ")}
+                    </div>
+                    {accessoryTotal > 0 && (
+                      <div style={{ color: s.gold, fontWeight: 700, fontSize: 18, marginBottom: 12 }}>
+                        Итого: {accessoryTotal.toLocaleString("ru-RU")} ₸
+                      </div>
+                    )}
                     <input placeholder="Клиент (необязательно)" value={accessoryClient} onChange={(e) => setAccessoryClient(e.target.value)}
                       style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "12px 14px", color: s.text, fontSize: 14, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
-                    <input placeholder="Сумма (₸)" inputMode="numeric" value={accessoryAmount} onChange={(e) => setAccessoryAmount(e.target.value.replace(/\D/g, ""))}
+                    <input
+                      placeholder={accessoryTotal > 0 ? `Сумма (по умолчанию ${accessoryTotal.toLocaleString("ru-RU")} ₸)` : "Сумма (₸)"}
+                      inputMode="numeric" value={accessoryAmount}
+                      onChange={(e) => setAccessoryAmount(e.target.value.replace(/\D/g, ""))}
                       style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "12px 14px", color: s.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
                   </div>
                 )}
 
                 <button onClick={saveAccessoryOrder} disabled={accessorySaving || !hasAccessoryItems}
-                  style={{ width: "100%", backgroundColor: hasAccessoryItems ? "#4caf50" : s.border, border: "none", borderRadius: 12, padding: "14px",
-                    color: hasAccessoryItems ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16, cursor: hasAccessoryItems ? "pointer" : "default" }}>
+                  style={{ ...btnBase, width: "100%", backgroundColor: hasAccessoryItems ? "#4caf50" : s.border, borderRadius: 12, padding: "14px",
+                    color: hasAccessoryItems ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16 }}>
                   {accessorySaving ? "Сохранение..." : "✓ Оформить продажу"}
                 </button>
               </>
@@ -483,42 +554,65 @@ export default function CashierPage() {
         {/* ── TAB: Мои заказы ── */}
         {mainTab === "orders" && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <h2 style={{ color: s.gold, fontSize: 16, margin: 0 }}>Заказы сегодня</h2>
-              <button onClick={loadData} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 12 }}>Обновить</button>
+              <button onClick={loadData} style={{ ...btnBase, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 14px", fontSize: 12 }}>Обновить</button>
             </div>
-            {myOrders.length === 0 && <div style={{ color: s.muted, textAlign: "center", padding: "40px 0" }}>Нет заказов сегодня</div>}
-            {myOrders.map((o) => {
+
+            {/* Status filter chips */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto", paddingBottom: 4 }}>
+              {([["all", "Все"], ["new", "Новые"], ["in_progress", "В работе"], ["done", "Готово"], ["delivered", "Доставлен"]] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setOrderFilter(key)}
+                  style={{ ...btnBase, padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+                    backgroundColor: orderFilter === key ? s.gold : s.card,
+                    color: orderFilter === key ? "#fff" : s.muted,
+                    border: `1px solid ${orderFilter === key ? s.gold : s.border}` }}>
+                  {label}
+                  {key !== "all" && (
+                    <span style={{ marginLeft: 5, opacity: 0.7 }}>
+                      {myOrders.filter((o) => (o.status || "new") === key).length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {filteredOrders.length === 0 && <div style={{ color: s.muted, textAlign: "center", padding: "40px 0" }}>Нет заказов</div>}
+            {filteredOrders.map((o) => {
               const st = (o.status in STATUSES) ? STATUSES[o.status] : STATUSES.new;
               const canNext = o.status in STATUS_FLOW;
               const canCancel = o.status !== "cancelled" && o.status !== "cancellation_requested";
               return (
-                <div key={o.id} style={{ backgroundColor: s.card, borderRadius: 12, padding: 16, marginBottom: 12, border: `1px solid ${o.status === "cancellation_requested" ? "#ff9800" : s.border}` }}>
+                <div key={o.id} style={{ backgroundColor: s.card, borderRadius: 12, padding: 16, marginBottom: 12,
+                  border: `1px solid ${o.status === "cancellation_requested" ? "#ff9800" : s.border}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
                       <div style={{ color: s.gold, fontWeight: 700, fontSize: 15 }}>{o.client_name || "—"}</div>
                       <div style={{ color: s.muted, fontSize: 13, marginTop: 4 }}>
                         {o.cake_flavor || "—"} · {o.quantity || "—"} шт
-                        {o.notes && <span style={{ marginLeft: 8 }}>{o.notes}</span>}
+                        {o.notes && <span style={{ marginLeft: 8, color: s.muted }}>{o.notes}</span>}
                       </div>
+                      {o.total_amount && (
+                        <div style={{ color: s.gold, fontSize: 13, fontWeight: 600, marginTop: 4 }}>
+                          {Number(o.total_amount).toLocaleString("ru-RU")} ₸
+                        </div>
+                      )}
                       {o.status === "cancellation_requested" && (
-                        <div style={{ color: "#ff9800", fontSize: 12, marginTop: 6 }}>⏳ Ожидает подтверждения: «{o.cancellation_reason}»</div>
+                        <div style={{ color: "#ff9800", fontSize: 12, marginTop: 6 }}>Ожидает подтверждения: «{o.cancellation_reason}»</div>
                       )}
                       {o.status === "cancelled" && (
-                        <div style={{ color: "#e57373", fontSize: 12, marginTop: 6 }}>✕ Отменён: «{o.cancellation_reason}»</div>
+                        <div style={{ color: "#e57373", fontSize: 12, marginTop: 6 }}>Отменён: «{o.cancellation_reason}»</div>
                       )}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
                       <button onClick={() => canNext && advanceStatus(o)} disabled={!canNext}
-                        title={canNext ? `Нажмите → ${STATUSES[STATUS_FLOW[o.status]]?.label}` : ""}
-                        style={{ backgroundColor: `${st.color}22`, color: st.color, borderRadius: 8, padding: "5px 12px", fontSize: 12, fontWeight: 600,
-                          border: `1px solid ${st.color}55`, cursor: canNext ? "pointer" : "default", transition: "all 0.15s",
-                          whiteSpace: "nowrap" }}>
+                        style={{ ...btnBase, backgroundColor: `${st.color}22`, color: st.color, borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600,
+                          border: `1px solid ${st.color}55`, whiteSpace: "nowrap" }}>
                         {st.label}{canNext ? " →" : ""}
                       </button>
                       {canCancel && (
                         <button onClick={() => { setCancelTarget(o); setCancelReason(""); }}
-                          style={{ background: "none", border: "1px solid #e5737444", color: "#e57373", borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: 12 }}>
+                          style={{ ...btnBase, background: "none", border: "1px solid #e5737444", color: "#e57373", borderRadius: 8, padding: "5px 12px", fontSize: 12 }}>
                           Отмена
                         </button>
                       )}
@@ -533,7 +627,7 @@ export default function CashierPage() {
 
       {/* Cancel modal */}
       {cancelTarget && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100 }}>
           <div style={{ backgroundColor: s.card, borderRadius: "20px 20px 0 0", padding: "24px 20px 40px", width: "100%", maxWidth: 640, boxSizing: "border-box" }}>
             <h2 style={{ color: "#e57373", fontSize: 16, marginBottom: 8 }}>Запрос на отмену</h2>
             <p style={{ color: s.muted, fontSize: 13, marginBottom: 20 }}>
@@ -545,16 +639,23 @@ export default function CashierPage() {
               style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "10px 14px",
                 color: s.text, fontSize: 14, outline: "none", resize: "none", boxSizing: "border-box", marginBottom: 20 }} />
             <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => setCancelTarget(null)} style={{ flex: 1, backgroundColor: s.border, border: "none", borderRadius: 10, padding: "12px", color: s.muted, cursor: "pointer", fontSize: 14 }}>Назад</button>
+              <button onClick={() => setCancelTarget(null)} style={{ ...btnBase, flex: 1, backgroundColor: s.border, borderRadius: 10, padding: "12px", color: s.muted, fontSize: 14 }}>Назад</button>
               <button onClick={requestCancel} disabled={!cancelReason.trim() || cancelSaving}
-                style={{ flex: 2, backgroundColor: cancelReason.trim() ? "#e57373" : s.border, border: "none", borderRadius: 10, padding: "12px",
-                  color: cancelReason.trim() ? "#fff" : s.muted, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                style={{ ...btnBase, flex: 2, backgroundColor: cancelReason.trim() ? "#e57373" : s.border, borderRadius: 10, padding: "12px",
+                  color: cancelReason.trim() ? "#fff" : s.muted, fontWeight: 700, fontSize: 14 }}>
                 {cancelSaving ? "Отправка..." : "Отправить запрос"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <style>{`
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+        input[type=number] { -moz-appearance: textfield; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      `}</style>
     </div>
   );
 }

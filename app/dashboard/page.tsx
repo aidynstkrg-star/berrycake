@@ -889,78 +889,147 @@ export default function Dashboard() {
         {tab === 1 && (
           <>
             {/* Toolbar */}
-            <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
-              <input placeholder="🔍 Поиск..." value={search} onChange={(e) => setSearch(e.target.value)}
-                style={{ flex: 1, minWidth: 180, backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 14px", color: s.text, fontSize: 13, outline: "none" }} />
-              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-                style={{ backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 14px", color: s.text, fontSize: 13, cursor: "pointer" }}>
-                <option value="all">Все статусы</option>
-                {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
-              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
-                style={{ backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 14px", color: s.text, fontSize: 13, outline: "none" }} />
-              <button onClick={() => { setSearch(""); setFilterStatus("all"); setFilterDate(""); }}
-                style={{ backgroundColor: s.border, border: "none", borderRadius: 8, padding: "8px 14px", color: s.muted, cursor: "pointer", fontSize: 13 }}>
-                Сброс
-              </button>
-              <button onClick={exportCSV}
-                style={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8, padding: "8px 14px", color: s.gold, cursor: "pointer", fontSize: 13 }}>
-                ↓ Excel
-              </button>
-              <button onClick={() => setShowAddModal(true)}
-                style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "8px 16px", color: "#ffffff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
-                + Заказ
-              </button>
-            </div>
+            {isMobile ? (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  <input placeholder="Поиск..." value={search} onChange={(e) => setSearch(e.target.value)}
+                    style={{ flex: 1, backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "10px 14px", color: s.text, fontSize: 14, outline: "none" }} />
+                  <button onClick={() => setShowAddModal(true)}
+                    style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "10px 16px", color: "#fff", cursor: "pointer", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
+                    + Заказ
+                  </button>
+                </div>
+                {/* Status chips */}
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4 }}>
+                  {([["all","Все"],["new","Новые"],["in_progress","В работе"],["done","Готово"],["delivered","Доставлен"],["cancelled","Отменён"]] as const).map(([k,l]) => (
+                    <button key={k} onClick={() => setFilterStatus(k)}
+                      style={{ padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", cursor: "pointer",
+                        backgroundColor: filterStatus === k ? s.gold : s.card,
+                        color: filterStatus === k ? "#fff" : s.muted,
+                        border: `1px solid ${filterStatus === k ? s.gold : s.border}` }}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+                <input placeholder="Поиск..." value={search} onChange={(e) => setSearch(e.target.value)}
+                  style={{ flex: 1, minWidth: 180, backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 14px", color: s.text, fontSize: 13, outline: "none" }} />
+                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+                  style={{ backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 14px", color: s.text, fontSize: 13, cursor: "pointer" }}>
+                  <option value="all">Все статусы</option>
+                  {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+                <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
+                  style={{ backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 14px", color: s.text, fontSize: 13, outline: "none" }} />
+                <button onClick={() => { setSearch(""); setFilterStatus("all"); setFilterDate(""); }}
+                  style={{ backgroundColor: s.border, border: "none", borderRadius: 8, padding: "8px 14px", color: s.muted, cursor: "pointer", fontSize: 13 }}>
+                  Сброс
+                </button>
+                <button onClick={exportCSV}
+                  style={{ backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 8, padding: "8px 14px", color: s.gold, cursor: "pointer", fontSize: 13 }}>
+                  ↓ Excel
+                </button>
+                <button onClick={() => setShowAddModal(true)}
+                  style={{ backgroundColor: s.gold, border: "none", borderRadius: 8, padding: "8px 16px", color: "#ffffff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                  + Заказ
+                </button>
+              </div>
+            )}
 
             <div style={{ color: s.muted, fontSize: 13, marginBottom: 12 }}>Найдено: {filtered.length}</div>
 
-            {/* Table */}
-            <div style={{ backgroundColor: s.card, borderRadius: 12, overflow: "hidden" }}>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${s.border}` }}>
-                      {[["client_name","Клиент"],["cake_flavor","Вкус"],["quantity","Кол-во"],["order_date","Дата"],["order_time","Время"],["address","Адрес"],["phone","Телефон"],["status","Статус"]].map(([f,l]) => (
-                        <th key={f} onClick={() => sortBy(f)} style={{ padding: "12px 14px", textAlign: "left", color: s.muted, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }}>
-                          {l}{sortField === f ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
-                        </th>
-                      ))}
-                      <th style={{ padding: "12px 14px", color: s.muted, fontWeight: 600 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.slice(0, 200).map((o) => (
-                      <tr key={o.id} style={{ borderBottom: `1px solid ${s.border}` }}>
-                        <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 600 }}>{o.client_name || o.customer_name || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>{o.cake_flavor || o.flavor || "—"}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "center" }}>{o.quantity ?? "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>{o.order_date || o.created_at?.slice(0,10) || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>{o.order_time || "—"}</td>
-                        <td style={{ padding: "10px 14px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.address || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>{o.phone || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>
-                          <select value={o.status || "new"} onChange={(e) => updateStatus(o.id, e.target.value)}
-                            style={{ backgroundColor: `${(STATUSES[o.status || "new"] || STATUSES.new).color}22`, border: `1px solid ${(STATUSES[o.status || "new"] || STATUSES.new).color}`, borderRadius: 6, padding: "3px 8px", color: (STATUSES[o.status || "new"] || STATUSES.new).color, fontSize: 12, cursor: "pointer" }}>
-                            {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                          </select>
-                        </td>
-                        <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+            {/* Mobile: card layout | Desktop: table */}
+            {isMobile ? (
+              <div>
+                {filtered.length === 0 && (
+                  <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 32, textAlign: "center", color: s.muted }}>Нет заказов</div>
+                )}
+                {filtered.slice(0, 200).map((o) => {
+                  const st = STATUSES[o.status || "new"] || STATUSES.new;
+                  return (
+                    <div key={o.id} style={{ backgroundColor: s.card, borderRadius: 12, padding: "14px 16px", marginBottom: 10, border: `1px solid ${o.status === "cancellation_requested" ? "#ff9800" : s.border}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                        <div>
+                          <div style={{ color: s.gold, fontWeight: 700, fontSize: 15 }}>{o.client_name || o.customer_name || "—"}</div>
+                          <div style={{ color: s.muted, fontSize: 12, marginTop: 2 }}>{o.phone || ""}</div>
+                        </div>
+                        <select value={o.status || "new"} onChange={(e) => updateStatus(o.id, e.target.value)}
+                          style={{ backgroundColor: `${st.color}22`, border: `1px solid ${st.color}55`, borderRadius: 8, padding: "4px 10px", color: st.color, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+                          {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ fontSize: 13, color: s.text, marginBottom: 6 }}>
+                        {o.cake_flavor || "—"} · {o.quantity ?? "—"} шт
+                        {o.notes && <span style={{ color: s.muted }}> · {o.notes}</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ color: s.muted, fontSize: 12 }}>{o.order_date || o.created_at?.slice(0,10) || "—"}{o.order_time ? ` ${o.order_time}` : ""}</span>
+                        {o.total_amount ? <span style={{ color: s.gold, fontWeight: 600, fontSize: 13 }}>{Number(o.total_amount).toLocaleString("ru-RU")} ₸</span> : null}
+                        {o.address ? <span style={{ color: s.muted, fontSize: 12 }}>{o.address}</span> : null}
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                           <button onClick={() => openEditOrder(o)}
-                            style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12, marginRight: 6 }}>
-                            ✏️
+                            style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12 }}>
+                            ✎
                           </button>
                           <button onClick={() => deleteOrder(o.id)}
-                            style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>
+                            style={{ background: "none", border: "1px solid #e5737444", color: "#e57373", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 12 }}>
                             ✕
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            ) : (
+              <div style={{ backgroundColor: s.card, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${s.border}` }}>
+                        {[["client_name","Клиент"],["cake_flavor","Вкус"],["quantity","Кол-во"],["order_date","Дата"],["order_time","Время"],["address","Адрес"],["phone","Телефон"],["status","Статус"]].map(([f,l]) => (
+                          <th key={f} onClick={() => sortBy(f)} style={{ padding: "12px 14px", textAlign: "left", color: s.muted, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }}>
+                            {l}{sortField === f ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                          </th>
+                        ))}
+                        <th style={{ padding: "12px 14px", color: s.muted, fontWeight: 600 }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.slice(0, 200).map((o) => (
+                        <tr key={o.id} style={{ borderBottom: `1px solid ${s.border}` }}>
+                          <td style={{ padding: "10px 14px", color: s.gold, fontWeight: 600 }}>{o.client_name || o.customer_name || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>{o.cake_flavor || o.flavor || "—"}</td>
+                          <td style={{ padding: "10px 14px", textAlign: "center" }}>{o.quantity ?? "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>{o.order_date || o.created_at?.slice(0,10) || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>{o.order_time || "—"}</td>
+                          <td style={{ padding: "10px 14px", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.address || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>{o.phone || "—"}</td>
+                          <td style={{ padding: "10px 14px" }}>
+                            <select value={o.status || "new"} onChange={(e) => updateStatus(o.id, e.target.value)}
+                              style={{ backgroundColor: `${(STATUSES[o.status || "new"] || STATUSES.new).color}22`, border: `1px solid ${(STATUSES[o.status || "new"] || STATUSES.new).color}`, borderRadius: 6, padding: "3px 8px", color: (STATUSES[o.status || "new"] || STATUSES.new).color, fontSize: 12, cursor: "pointer" }}>
+                              {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                            </select>
+                          </td>
+                          <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                            <button onClick={() => openEditOrder(o)}
+                              style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12, marginRight: 6 }}>
+                              ✎
+                            </button>
+                            <button onClick={() => deleteOrder(o.id)}
+                              style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
 
