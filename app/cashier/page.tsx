@@ -53,7 +53,7 @@ export default function CashierPage() {
   const [isWalkIn, setIsWalkIn] = useState(false);
   const [walkInName, setWalkInName] = useState("");
   const [walkInAmount, setWalkInAmount] = useState("");
-  const [quantity, setQuantity] = useState(1);
+  const [flavorQtys, setFlavorQtys] = useState<Record<string, number>>({});
   const [size, setSize] = useState<string | null>(null);
   const [customSize, setCustomSize] = useState("");
   const [saving, setSaving] = useState(false);
@@ -112,14 +112,20 @@ export default function CashierPage() {
   const reset = () => {
     setStep(0); setFlavors([]); setCustomFlavor(""); setShowCustom(false);
     setClientQuery(""); setSelectedClient(null); setIsWalkIn(false);
-    setWalkInName(""); setWalkInAmount(""); setQuantity(1);
+    setWalkInName(""); setWalkInAmount(""); setFlavorQtys({});
     setSize(null); setCustomSize(""); setDone(false);
   };
 
   const toggleFlavor = (f: string) =>
     setFlavors((prev) => prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]);
 
-  const finalFlavor = [...flavors, ...(showCustom && customFlavor ? [customFlavor] : [])].join(" + ");
+  const selectedFlavorList = [...flavors, ...(showCustom && customFlavor.trim() ? [customFlavor.trim()] : [])];
+  const setFlavorQty = (name: string, qty: number) =>
+    setFlavorQtys((prev) => ({ ...prev, [name]: Math.max(1, qty) }));
+  const totalQuantity = selectedFlavorList.reduce((sum, f) => sum + (flavorQtys[f] ?? 1), 0);
+  const finalFlavor = selectedFlavorList.length > 1
+    ? selectedFlavorList.map((f) => `${f} ×${flavorQtys[f] ?? 1}`).join(" + ")
+    : selectedFlavorList.join(" + ");
   const finalSize = size === "Другое" ? (customSize || null) : size;
 
   const saveOrder = async () => {
@@ -129,12 +135,12 @@ export default function CashierPage() {
       const rate = isWalkIn ? null : (selectedClient?.price_per_unit || null);
       const totalAmount = isWalkIn
         ? (walkInAmount ? Number(walkInAmount) : null)
-        : (rate && quantity ? rate * quantity : null);
+        : (rate && totalQuantity ? rate * totalQuantity : null);
       await supabase.from("berrycake_orders").insert({
         client_name: clientName,
         phone: isWalkIn ? null : (selectedClient?.phone || null),
         cake_flavor: finalFlavor,
-        quantity,
+        quantity: totalQuantity,
         order_date: new Date().toISOString().slice(0, 10),
         status: "new",
         total_amount: totalAmount,
@@ -255,7 +261,7 @@ export default function CashierPage() {
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><IconCheck /></div>
                 <h2 style={{ color: s.gold, fontSize: 24, marginBottom: 8 }}>Заказ принят!</h2>
                 <p style={{ color: s.muted, fontSize: 14, marginBottom: 32, lineHeight: 2 }}>
-                  {finalFlavor} · {quantity} шт{finalSize ? ` · ${finalSize}` : ""}<br />
+                  {finalFlavor} · {totalQuantity} шт{finalSize ? ` · ${finalSize}` : ""}<br />
                   {isWalkIn ? (walkInName || "Физ. лицо") : selectedClient?.name}
                 </p>
                 <button onClick={reset}
@@ -389,37 +395,34 @@ export default function CashierPage() {
                   </div>
                 )}
 
-                {/* Step 2: Quantity — input field + stepper */}
+                {/* Step 2: Quantity per selected flavor */}
                 {step === 2 && (
-                  <div style={{ textAlign: "center" }}>
-                    <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 32 }}>Количество</h2>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 48 }}>
-                      <button onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                        style={{ ...btnBase, width: 56, height: 56, borderRadius: "50%", backgroundColor: s.card, border: `2px solid ${s.border}`, color: s.text, fontSize: 28 }}>
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        min="1"
-                        inputMode="numeric"
-                        value={quantity}
-                        onChange={(e) => {
-                          const v = parseInt(e.target.value);
-                          if (!isNaN(v) && v >= 1) setQuantity(v);
-                          else if (e.target.value === "") setQuantity(1);
-                        }}
-                        style={{
-                          width: 100, textAlign: "center", fontSize: 52, fontWeight: 700,
-                          color: s.gold, backgroundColor: "transparent", border: "none",
-                          outline: "none", fontFamily: "'Inter', sans-serif",
-                          borderBottom: `2px solid ${s.border}`, padding: "4px 0",
-                          appearance: "textfield",
-                        }}
-                      />
-                      <button onClick={() => setQuantity((q) => q + 1)}
-                        style={{ ...btnBase, width: 56, height: 56, borderRadius: "50%", backgroundColor: s.card, border: `2px solid ${s.gold}`, color: s.gold, fontSize: 28 }}>
-                        +
-                      </button>
+                  <div>
+                    <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 20, textAlign: "center" }}>Количество</h2>
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
+                      {selectedFlavorList.map((f, i) => {
+                        const qty = flavorQtys[f] ?? 1;
+                        return (
+                          <div key={f} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                            padding: "14px 20px", borderBottom: i < selectedFlavorList.length - 1 ? `1px solid ${s.border}` : "none" }}>
+                            <div style={{ color: s.text, fontWeight: 600, fontSize: 15 }}>{f}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                              <button onClick={() => setFlavorQty(f, qty - 1)}
+                                style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.border}`, background: "none", color: s.text, fontSize: 20 }}>
+                                −
+                              </button>
+                              <span style={{ color: s.gold, fontWeight: 700, fontSize: 18, minWidth: 24, textAlign: "center" }}>{qty}</span>
+                              <button onClick={() => setFlavorQty(f, qty + 1)}
+                                style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.gold}`, background: "none", color: s.gold, fontSize: 20 }}>
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ textAlign: "center", color: s.muted, fontSize: 14, marginBottom: 28 }}>
+                      Итого: <strong style={{ color: s.gold }}>{totalQuantity} шт</strong>
                     </div>
                     <div style={{ display: "flex", gap: 12 }}>
                       <button onClick={() => setStep(1)} style={{ ...btnBase, flex: 1, backgroundColor: s.border, borderRadius: 12, padding: "14px", color: s.muted, fontSize: 15 }}>← Назад</button>
@@ -453,11 +456,11 @@ export default function CashierPage() {
                       <div style={{ fontSize: 14, lineHeight: 2 }}>
                         <div><span style={{ color: s.muted }}>Вкус:</span> <strong>{finalFlavor}</strong></div>
                         <div><span style={{ color: s.muted }}>Клиент:</span> <strong>{isWalkIn ? (walkInName || "Физ. лицо") : selectedClient?.name}</strong></div>
-                        <div><span style={{ color: s.muted }}>Количество:</span> <strong>{quantity} шт</strong></div>
+                        <div><span style={{ color: s.muted }}>Количество:</span> <strong>{totalQuantity} шт</strong></div>
                         {size && <div><span style={{ color: s.muted }}>Размер:</span> <strong>{finalSize || size}</strong></div>}
                         {(isWalkIn ? walkInAmount : selectedClient?.price_per_unit) && (
                           <div><span style={{ color: s.muted }}>Сумма:</span> <strong style={{ color: s.gold }}>
-                            {isWalkIn ? walkInAmount : (selectedClient?.price_per_unit * quantity).toLocaleString("ru-RU")} ₸
+                            {isWalkIn ? walkInAmount : (selectedClient?.price_per_unit * totalQuantity).toLocaleString("ru-RU")} ₸
                           </strong></div>
                         )}
                       </div>

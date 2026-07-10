@@ -210,15 +210,19 @@ export default function Dashboard() {
     const needed: Record<string, { base: string; required: number }> = {};
 
     upcoming.forEach((o) => {
-      // Support combo flavors: "ВУПИ + НУТЕЛЛА" → ["ВУПИ", "НУТЕЛЛА"]
-      const flavorParts = (o.cake_flavor || "").split(" + ").map((f: string) => f.trim()).filter(Boolean);
+      // Support combo flavors: "ВУПИ ×3 + НУТЕЛЛА ×2" → [{name:"ВУПИ",qty:3},{name:"НУТЕЛЛА",qty:2}]
+      const rawParts = (o.cake_flavor || "").split(" + ").map((f: string) => f.trim()).filter(Boolean);
       const qty = o.quantity || 1;
+      const parsedParts = rawParts.map((f: string) => {
+        const m = f.match(/^(.*?)\s*×\s*(\d+)$/);
+        return m ? { name: m[1].trim(), qty: parseInt(m[2], 10) } : { name: f, qty: null as number | null };
+      });
 
-      flavorParts.forEach((flavorPart: string) => {
+      parsedParts.forEach(({ name: flavorPart, qty: explicitQty }) => {
         const recipe = recipes.find((r) => r.flavor === flavorPart);
         if (!recipe) return;
-        // For combos split quantity equally per flavor
-        const partQty = qty / flavorParts.length;
+        // Use explicit per-flavor quantity if present, otherwise split remaining qty equally
+        const partQty = explicitQty ?? (qty / rawParts.length);
         (recipe.ingredients || []).forEach((ing: any) => {
           if (!ing.name || !ing.amount) return;
           if (!needed[ing.name]) needed[ing.name] = { base: toBaseUnit(0, ing.unit || "г").base, required: 0 };
