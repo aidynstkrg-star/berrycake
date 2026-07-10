@@ -4,10 +4,42 @@ import { useRouter } from "next/navigation";
 
 const s = { bg: "#f5f5f3", card: "#ffffff", gold: "#111827", text: "#111827", muted: "#6b7280", border: "#e5e7eb" };
 
+const IconCashier = () => (
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="20" height="14" rx="2"/>
+    <path d="M8 21h8M12 17v4"/>
+    <path d="M7 8h.01M12 8h.01M17 8h.01M7 12h.01M12 12h.01M17 12h.01"/>
+  </svg>
+);
+const IconDashboard = () => (
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="3" width="7" height="7" rx="1"/>
+    <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <rect x="14" y="14" width="7" height="7" rx="1"/>
+  </svg>
+);
+const IconFactory = () => (
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 20h20"/>
+    <path d="M7 20V8l5 4V8l5 4V4"/>
+    <path d="M2 20V12l5-4"/>
+  </svg>
+);
+const IconCake = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/>
+    <path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/>
+    <path d="M2 21h20"/>
+    <path d="M7 8v2M12 8v2M17 8v2"/>
+    <path d="M7 4h.01M12 4h.01M17 4h.01"/>
+  </svg>
+);
+
 const SECTIONS = [
-  { key: "cashier",    label: "КАССА",       icon: "🧾", digits: 4, hint: "Менеджер цеха" },
-  { key: "management", label: "РУКОВОДСТВО", icon: "📊", digits: 6, hint: "Руководство" },
-  { key: "production", label: "ПРОИЗВОДСТВО", icon: "🏭", digits: 4, hint: "Производство" },
+  { key: "cashier",    label: "КАССА",       Icon: IconCashier,   digits: 4, hint: "Менеджер цеха" },
+  { key: "management", label: "РУКОВОДСТВО", Icon: IconDashboard, digits: 6, hint: "Руководство" },
+  { key: "production", label: "ПРОИЗВОДСТВО", Icon: IconFactory,  digits: 4, hint: "Производство" },
 ];
 
 export default function LoginPage() {
@@ -85,7 +117,9 @@ export default function LoginPage() {
     return (
       <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, sans-serif" }}>
         <div style={{ textAlign: "center", animation: "fadeIn 0.4s ease" }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>👋</div>
+          <div style={{ color: s.gold, marginBottom: 16, display: "flex", justifyContent: "center" }}>
+            <IconCake />
+          </div>
           <h2 style={{ color: s.gold, fontSize: 26, fontWeight: 700, marginBottom: 8 }}>Добро пожаловать,</h2>
           <h1 style={{ color: s.text, fontSize: 36, fontWeight: 800 }}>{welcome}!</h1>
         </div>
@@ -98,7 +132,9 @@ export default function LoginPage() {
   if (!section) {
     return (
       <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, sans-serif", padding: 24 }}>
-        <div style={{ fontSize: 44, marginBottom: 10 }}>🍰</div>
+        <div style={{ color: s.gold, marginBottom: 12, display: "flex" }}>
+          <IconCake />
+        </div>
         <h1 style={{ color: s.gold, fontSize: 22, fontWeight: 700, marginBottom: 4 }}>BerryCake</h1>
         <p style={{ color: s.muted, fontSize: 14, marginBottom: 48 }}>Выберите раздел для входа</p>
 
@@ -113,8 +149,8 @@ export default function LoginPage() {
                 transition: "all 0.15s",
               }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = s.gold; e.currentTarget.style.transform = "translateY(-2px)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = s.border; e.currentTarget.style.transform = "none"; }}>
-              <span style={{ fontSize: 36 }}>{sec.icon}</span>
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#f0f0ee"; e.currentTarget.style.transform = "none"; }}>
+              <span style={{ color: s.text }}><sec.Icon /></span>
               <span style={{ color: s.text, fontWeight: 700, fontSize: 13, letterSpacing: 1.5 }}>{sec.label}</span>
             </button>
           ))}
@@ -124,6 +160,7 @@ export default function LoginPage() {
   }
 
   // PIN entry
+  const SectionIcon = section.Icon;
   return (
     <div style={{ minHeight: "100vh", backgroundColor: s.bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', -apple-system, sans-serif" }}>
       <button onClick={() => { setSection(null); setPin([]); setError(""); }}
@@ -132,7 +169,7 @@ export default function LoginPage() {
       </button>
 
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 36, marginBottom: 8 }}>{section.icon}</div>
+        <div style={{ color: s.gold, marginBottom: 8, display: "flex", justifyContent: "center" }}><SectionIcon /></div>
         <h2 style={{ color: s.gold, fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{section.label}</h2>
         <p style={{ color: s.muted, fontSize: 13, marginBottom: 36 }}>Введите {section.digits}-значный PIN-код</p>
 
