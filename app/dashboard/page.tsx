@@ -13,7 +13,6 @@ const supabase = createClient(
 const STATUSES: Record<string, { label: string; color: string }> = { new: { label: "Новый", color: "#C9845A" }, in_progress: { label: "В работе", color: "#6B9FCE" }, done: { label: "Готов", color: "#7A9E88" }, delivered: { label: "Доставлен", color: "#9E8070" }, cancellation_requested: { label: "Запрос отмены", color: "#D4845A" }, cancelled: { label: "Отменён", color: "#C0504D" } };
 const CANCEL_APPROVERS = ["Дархан", "Айдын"];
 const TABS = ["Обзор", "Заказы", "Клиенты", "Расходы", "Производство", "Аналитика ИИ", "Настройки"];
-const PROD_FLAVORS = ["ВУПИ", "МОЛОЧКА", "ЯГОДНЫЙ", "НУТЕЛЛА", "СНИКЕРС", "СГУЩЕНКА ОРЕХ"];
 const FLAVOR_COLORS: Record<string, string> = { "ВУПИ": "#f06292", "МОЛОЧКА": "#64b5f6", "ЯГОДНЫЙ": "#81c784", "НУТЕЛЛА": "#a1887f", "СНИКЕРС": "#ffb74d", "СГУЩЕНКА ОРЕХ": "#e57373" };
 const PIE_COLORS_PROD = ["#c8a96e","#64b5f6","#81c784","#e57373","#f06292","#ffb74d"];
 
@@ -2657,7 +2656,7 @@ export default function Dashboard() {
               <select value={recipeForm.flavor} onChange={(e) => setRecipeForm((f: any) => ({ ...f, flavor: e.target.value }))}
                 style={{ width: "100%", backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 13 }}>
                 <option value="">— выберите —</option>
-                {PROD_FLAVORS.map((f) => <option key={f}>{f}</option>)}
+                {dbFlavors.map((f) => <option key={f.id}>{f.name}</option>)}
               </select>
             </div>
 
