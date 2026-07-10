@@ -10,7 +10,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-const STATUSES: Record<string, { label: string; color: string }> = { new: { label: "Новый", color: "#c8a96e" }, in_progress: { label: "В работе", color: "#64b5f6" }, done: { label: "Готов", color: "#81c784" }, delivered: { label: "Доставлен", color: "#888" }, cancellation_requested: { label: "Запрос отмены", color: "#ff9800" }, cancelled: { label: "Отменён", color: "#e57373" } };
+const STATUSES: Record<string, { label: string; color: string }> = { new: { label: "Новый", color: "#C9845A" }, in_progress: { label: "В работе", color: "#6B9FCE" }, done: { label: "Готов", color: "#7A9E88" }, delivered: { label: "Доставлен", color: "#9E8070" }, cancellation_requested: { label: "Запрос отмены", color: "#D4845A" }, cancelled: { label: "Отменён", color: "#C0504D" } };
 const CANCEL_APPROVERS = ["Дархан", "Айдын"];
 const TABS = ["Обзор", "Заказы", "Клиенты", "Расходы", "Производство", "Аналитика ИИ", "Настройки"];
 const PROD_FLAVORS = ["ВУПИ", "МОЛОЧКА", "ЯГОДНЫЙ", "НУТЕЛЛА", "СНИКЕРС", "СГУЩЕНКА ОРЕХ"];
@@ -771,8 +771,9 @@ export default function Dashboard() {
 
   if (!user) return null;
 
-  const s = { bg: "#f5f5f3", card: "#ffffff", gold: "#111827", text: "#111827", muted: "#6b7280", border: "#e5e7eb", sh: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)" };
-  const font = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
+  const s = { bg: "#FAF6F1", card: "#ffffff", gold: "#8C1B3B", text: "#3E2723", muted: "#9E8070", border: "#E2CEB8", sh: "0 1px 4px rgba(62,39,35,0.07), 0 1px 2px rgba(62,39,35,0.04)" };
+  const font = "'Jost', 'Inter', -apple-system, sans-serif";
+  const serif = "'Cormorant Garamond', Georgia, serif";
 
   return (
     <div style={{ backgroundColor: s.bg, minHeight: "100vh", color: s.text, fontFamily: font }}>
@@ -893,13 +894,13 @@ export default function Dashboard() {
               {/* Financial KPIs */}
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3,1fr)", gap: isMobile ? 10 : 16, marginBottom: 16 }}>
                 {[
-                  { label: "Выручка", val: mRevenue > 0 ? `${mRevenue.toLocaleString("ru-RU")} ₸` : "—", color: "#81c784", border: "#81c784" },
-                  { label: "Расходы", val: mExpensesTotal > 0 ? `${mExpensesTotal.toLocaleString("ru-RU")} ₸` : "—", color: "#e57373", border: "#e57373" },
-                  { label: "Прибыль", val: (mRevenue > 0 || mExpensesTotal > 0) ? `${mProfit.toLocaleString("ru-RU")} ₸` : "—", color: mProfit >= 0 ? s.gold : "#e57373", border: mProfit >= 0 ? s.gold : "#e57373" },
+                  { label: "Выручка", val: mRevenue > 0 ? `${mRevenue.toLocaleString("ru-RU")} ₸` : "—", color: "#7A9E88", border: "#7A9E88" },
+                  { label: "Расходы", val: mExpensesTotal > 0 ? `${mExpensesTotal.toLocaleString("ru-RU")} ₸` : "—", color: "#C0504D", border: "#C0504D" },
+                  { label: "Прибыль", val: (mRevenue > 0 || mExpensesTotal > 0) ? `${mProfit.toLocaleString("ru-RU")} ₸` : "—", color: mProfit >= 0 ? s.gold : "#C0504D", border: mProfit >= 0 ? s.gold : "#C0504D" },
                 ].map((st) => (
                   <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? "14px 12px" : 20, boxShadow: s.sh, borderLeft: `3px solid ${st.border}` }}>
-                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label} {monthLabel.split(" ")[0]}</div>
-                    <div style={{ color: st.color, fontSize: isMobile ? 20 : 26, fontWeight: 700 }}>{st.val}</div>
+                    <div style={{ color: s.muted, fontSize: 11, marginBottom: 6, letterSpacing: "0.5px", textTransform: "uppercase" as const }}>{st.label}</div>
+                    <div style={{ color: st.color, fontSize: isMobile ? 22 : 28, fontWeight: 600, fontFamily: serif }}>{st.val}</div>
                   </div>
                 ))}
               </div>
@@ -911,9 +912,9 @@ export default function Dashboard() {
                   ["Заказов сегодня", todayStats.orders],
                   ["Тортов сегодня", todayStats.cakes],
                 ].map(([label, val]) => (
-                  <div key={label} style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? "14px 12px" : 20, boxShadow: s.sh, borderLeft: "3px solid #111827" }}>
-                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 8 }}>{label}</div>
-                    <div style={{ color: s.gold, fontSize: isMobile ? 22 : 32, fontWeight: 700 }}>{val}</div>
+                  <div key={label} style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? "14px 12px" : 20, boxShadow: s.sh, borderLeft: `3px solid ${s.gold}` }}>
+                    <div style={{ color: s.muted, fontSize: 11, marginBottom: 8, textTransform: "uppercase" as const, letterSpacing: "0.5px" }}>{label}</div>
+                    <div style={{ color: s.gold, fontSize: isMobile ? 26 : 36, fontWeight: 600, fontFamily: serif, lineHeight: 1 }}>{val}</div>
                   </div>
                 ))}
               </div>

@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-const s = { bg: "#f5f5f3", card: "#ffffff", gold: "#111827", text: "#111827", muted: "#6b7280", border: "#e5e7eb" };
+const s = { bg: "#FAF6F1", card: "#ffffff", gold: "#8C1B3B", text: "#3E2723", muted: "#9E8070", border: "#E2CEB8" };
 const SIZES = ["S", "M", "L", "Другое"];
 const STATUS_FLOW: Record<string, string> = { new: "in_progress", in_progress: "done", done: "delivered" };
 const STATUSES: Record<string, { label: string; color: string }> = {
