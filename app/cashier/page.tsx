@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { calcFlavorBalance } from "@/lib/flavorStock";
+import { calcFlavorBalance, flavorSizeKey, flavorTotalBalance, SIZES } from "@/lib/flavorStock";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -10,7 +10,6 @@ const supabase = createClient(
 );
 
 const s = { bg: "#FAF6F1", card: "#ffffff", gold: "#8C1B3B", text: "#3E2723", muted: "#9E8070", border: "#E2CEB8" };
-const SIZES = ["S", "M", "L", "Другое"];
 const STATUS_FLOW: Record<string, string> = { new: "in_progress", in_progress: "done", done: "delivered" };
 const STATUSES: Record<string, { label: string; color: string }> = {
   new: { label: "Новый", color: "#c8a96e" },
@@ -53,8 +52,7 @@ export default function CashierPage() {
   const [walkInName, setWalkInName] = useState("");
   const [walkInAmount, setWalkInAmount] = useState("");
   const [flavorQtys, setFlavorQtys] = useState<Record<string, number>>({});
-  const [size, setSize] = useState<string | null>(null);
-  const [customSize, setCustomSize] = useState("");
+  const [flavorSizes, setFlavorSizes] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -64,6 +62,10 @@ export default function CashierPage() {
   const [accessoryAmount, setAccessoryAmount] = useState("");
   const [accessorySaving, setAccessorySaving] = useState(false);
   const [accessoryDone, setAccessoryDone] = useState(false);
+
+  // Pre-order date
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [orderDate, setOrderDate] = useState(todayStr);
 
   // Orders filter
   const [orderFilter, setOrderFilter] = useState("all");
@@ -93,7 +95,7 @@ export default function CashierPage() {
     const today = new Date().toISOString().slice(0, 10);
     const [clientsRes, ordersRes, flavorsRes, accRes, allOrdersRes, productionRes] = await Promise.all([
       supabase.from("berrycake_clients").select("id,name,phone,price_per_unit,client_type").order("name"),
-      supabase.from("berrycake_orders").select("*").gte("created_at", today + "T00:00:00Z").order("created_at", { ascending: false }),
+      supabase.from("berrycake_orders").select("*").gte("order_date", today).order("order_date", { ascending: true }),
       supabase.from("berrycake_flavors").select("name").eq("active", true).order("sort_order"),
       supabase.from("berrycake_accessories").select("*").eq("active", true).order("sort_order"),
       supabase.from("berrycake_orders").select("cake_flavor,quantity,status").neq("status", "cancelled"),
@@ -115,8 +117,9 @@ export default function CashierPage() {
   const reset = () => {
     setStep(0); setFlavors([]);
     setClientQuery(""); setSelectedClient(null); setIsWalkIn(false);
-    setWalkInName(""); setWalkInAmount(""); setFlavorQtys({});
-    setSize(null); setCustomSize(""); setDone(false);
+    setWalkInName(""); setWalkInAmount(""); setFlavorQtys({}); setFlavorSizes({});
+    setOrderDate(new Date().toISOString().slice(0, 10));
+    setDone(false);
   };
 
   const toggleFlavor = (f: string) =>
@@ -124,11 +127,15 @@ export default function CashierPage() {
 
   const setFlavorQty = (name: string, qty: number) =>
     setFlavorQtys((prev) => ({ ...prev, [name]: Math.max(1, qty) }));
+  const setFlavorSize = (name: string, sz: string) =>
+    setFlavorSizes((prev) => ({ ...prev, [name]: sz }));
+
+  const flavorsLabel = flavors.join(" + ");
   const totalQuantity = flavors.reduce((sum, f) => sum + (flavorQtys[f] ?? 1), 0);
+  const allSizesChosen = flavors.length > 0 && flavors.every((f) => !!flavorSizes[f]);
   const finalFlavor = flavors.length > 1
-    ? flavors.map((f) => `${f} ×${flavorQtys[f] ?? 1}`).join(" + ")
-    : flavors.join(" + ");
-  const finalSize = size === "Другое" ? (customSize || null) : size;
+    ? flavors.map((f) => `${f} ${flavorSizes[f]} ×${flavorQtys[f] ?? 1}`).join(" + ")
+    : (flavors[0] && flavorSizes[flavors[0]] ? `${flavors[0]} ${flavorSizes[flavors[0]]}` : flavorsLabel);
 
   const saveOrder = async () => {
     setSaving(true);
@@ -143,11 +150,11 @@ export default function CashierPage() {
         phone: isWalkIn ? null : (selectedClient?.phone || null),
         cake_flavor: finalFlavor,
         quantity: totalQuantity,
-        order_date: new Date().toISOString().slice(0, 10),
+        order_date: orderDate,
         status: "new",
         total_amount: totalAmount,
         payment_type: isWalkIn ? "наличные" : (selectedClient?.client_type || null),
-        notes: finalSize ? `Размер: ${finalSize}` : null,
+        notes: orderDate > new Date().toISOString().slice(0, 10) ? `Предзаказ на ${orderDate}` : null,
       });
       setDone(true);
       loadData();
@@ -208,10 +215,14 @@ export default function CashierPage() {
 
   const hasAccessoryItems = Object.values(accessoryQtys).some((q) => q > 0);
   const pendingCancel = myOrders.filter((o) => o.status === "cancellation_requested").length;
+  const today = new Date().toISOString().slice(0, 10);
+  const todayOrders = myOrders.filter((o) => (o.order_date || "").slice(0, 10) === today);
+  const preOrders = myOrders.filter((o) => (o.order_date || "").slice(0, 10) > today);
+  const dueToday = myOrders.filter((o) => (o.order_date || "").slice(0, 10) === today && !["delivered","cancelled"].includes(o.status || "")).length;
 
   const filteredOrders = orderFilter === "all"
-    ? myOrders
-    : myOrders.filter((o) => (o.status || "new") === orderFilter);
+    ? todayOrders
+    : todayOrders.filter((o) => (o.status || "new") === orderFilter);
 
   const btnBase: React.CSSProperties = {
     border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif",
@@ -249,6 +260,11 @@ export default function CashierPage() {
                 {pendingCancel}
               </span>
             )}
+            {key === "orders" && dueToday > 0 && (
+              <span style={{ marginLeft: 4, backgroundColor: s.gold, color: "#fff", borderRadius: "50%", fontSize: 10, padding: "1px 5px", fontWeight: 700, display: "inline-block" }}>
+                {dueToday}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -261,10 +277,17 @@ export default function CashierPage() {
             {done ? (
               <div style={{ textAlign: "center", padding: "60px 0", animation: "fadeIn 0.2s ease" }}>
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><IconCheck /></div>
-                <h2 style={{ color: s.gold, fontSize: 24, marginBottom: 8 }}>Заказ принят!</h2>
+                <h2 style={{ color: s.gold, fontSize: 24, marginBottom: 8 }}>
+                  {orderDate > new Date().toISOString().slice(0, 10) ? "Предзаказ принят!" : "Заказ принят!"}
+                </h2>
                 <p style={{ color: s.muted, fontSize: 14, marginBottom: 32, lineHeight: 2 }}>
-                  {finalFlavor} · {totalQuantity} шт{finalSize ? ` · ${finalSize}` : ""}<br />
+                  {finalFlavor} · {totalQuantity} шт<br />
                   {isWalkIn ? (walkInName || "Физ. лицо") : selectedClient?.name}
+                  {orderDate > new Date().toISOString().slice(0, 10) && (
+                    <><br /><strong style={{ color: s.gold }}>
+                      Выдать: {new Date(orderDate + "T12:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
+                    </strong></>
+                  )}
                 </p>
                 <button onClick={reset}
                   style={{ ...btnBase, backgroundColor: s.gold, borderRadius: 12, padding: "14px 40px", color: "#ffffff", fontWeight: 700, fontSize: 16 }}>
@@ -275,7 +298,7 @@ export default function CashierPage() {
               <>
                 {/* Progress — clickable for completed steps */}
                 <div style={{ display: "flex", gap: 6, marginBottom: 32 }}>
-                  {["Вкус", "Клиент", "Кол-во", "Размер"].map((label, i) => (
+                  {["Вкус", "Клиент", "Размер/Кол-во", "Итог"].map((label, i) => (
                     <div key={i} onClick={() => i < step && setStep(i)}
                       style={{ flex: 1, textAlign: "center", cursor: i < step ? "pointer" : "default" }}>
                       <div style={{ height: 4, borderRadius: 2, marginBottom: 6,
@@ -304,7 +327,7 @@ export default function CashierPage() {
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
                         {dbFlavors.map((f) => {
                           const sel = flavors.includes(f);
-                          const balance = Math.round(flavorBalance[f] ?? 0);
+                          const balance = Math.round(flavorTotalBalance(flavorBalance, f));
                           const low = balance <= 0;
                           return (
                             <button key={f} onClick={() => toggleFlavor(f)}
@@ -323,15 +346,15 @@ export default function CashierPage() {
                         })}
                       </div>
                     )}
-                    {finalFlavor && (
+                    {flavorsLabel && (
                       <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 13 }}>
                         <span style={{ color: "#166534", fontWeight: 600 }}>Выбрано: </span>
-                        <span style={{ color: s.text }}>{finalFlavor}</span>
+                        <span style={{ color: s.text }}>{flavorsLabel}</span>
                       </div>
                     )}
-                    <button onClick={() => setStep(1)} disabled={!finalFlavor}
-                      style={{ ...btnBase, width: "100%", backgroundColor: finalFlavor ? s.gold : s.border, borderRadius: 12, padding: "14px",
-                        color: finalFlavor ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16 }}>
+                    <button onClick={() => setStep(1)} disabled={!flavorsLabel}
+                      style={{ ...btnBase, width: "100%", backgroundColor: flavorsLabel ? s.gold : s.border, borderRadius: 12, padding: "14px",
+                        color: flavorsLabel ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16 }}>
                       Далее →
                     </button>
                   </div>
@@ -396,44 +419,64 @@ export default function CashierPage() {
                   </div>
                 )}
 
-                {/* Step 2: Quantity per selected flavor */}
+                {/* Step 2: Size + quantity per selected flavor */}
                 {step === 2 && (
                   <div>
-                    <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 20, textAlign: "center" }}>Количество</h2>
+                    <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 20, textAlign: "center" }}>Размер и количество</h2>
                     <div style={{ backgroundColor: s.card, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
                       {flavors.map((f, i) => {
                         const qty = flavorQtys[f] ?? 1;
+                        const chosenSize = flavorSizes[f];
                         return (
-                          <div key={f} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                            padding: "14px 20px", borderBottom: i < flavors.length - 1 ? `1px solid ${s.border}` : "none" }}>
-                            <div style={{ color: s.text, fontWeight: 600, fontSize: 15 }}>{f}</div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <button onClick={() => setFlavorQty(f, qty - 1)}
-                                style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.border}`, background: "none", color: s.text, fontSize: 20, flexShrink: 0 }}>
-                                −
-                              </button>
-                              <input
-                                type="number"
-                                min="1"
-                                inputMode="numeric"
-                                value={qty}
-                                onChange={(e) => {
-                                  const v = parseInt(e.target.value, 10);
-                                  if (!isNaN(v)) setFlavorQty(f, v);
-                                  else if (e.target.value === "") setFlavorQty(f, 1);
-                                }}
-                                style={{
-                                  width: 44, textAlign: "center", fontSize: 18, fontWeight: 700,
-                                  color: s.gold, backgroundColor: "transparent", border: "none",
-                                  outline: "none", fontFamily: "'Inter', sans-serif",
-                                  borderBottom: `1px solid ${s.border}`, padding: "2px 0",
-                                  appearance: "textfield",
-                                }}
-                              />
-                              <button onClick={() => setFlavorQty(f, qty + 1)}
-                                style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.gold}`, background: "none", color: s.gold, fontSize: 20, flexShrink: 0 }}>
-                                +
-                              </button>
+                          <div key={f} style={{ padding: "14px 20px", borderBottom: i < flavors.length - 1 ? `1px solid ${s.border}` : "none" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                              <div style={{ color: s.text, fontWeight: 600, fontSize: 15 }}>{f}</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <button onClick={() => setFlavorQty(f, qty - 1)}
+                                  style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.border}`, background: "none", color: s.text, fontSize: 20, flexShrink: 0 }}>
+                                  −
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  inputMode="numeric"
+                                  value={qty}
+                                  onChange={(e) => {
+                                    const v = parseInt(e.target.value, 10);
+                                    if (!isNaN(v)) setFlavorQty(f, v);
+                                    else if (e.target.value === "") setFlavorQty(f, 1);
+                                  }}
+                                  style={{
+                                    width: 44, textAlign: "center", fontSize: 18, fontWeight: 700,
+                                    color: s.gold, backgroundColor: "transparent", border: "none",
+                                    outline: "none", fontFamily: "'Inter', sans-serif",
+                                    borderBottom: `1px solid ${s.border}`, padding: "2px 0",
+                                    appearance: "textfield",
+                                  }}
+                                />
+                                <button onClick={() => setFlavorQty(f, qty + 1)}
+                                  style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.gold}`, background: "none", color: s.gold, fontSize: 20, flexShrink: 0 }}>
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              {SIZES.map((sz) => {
+                                const bal = Math.round(flavorBalance[flavorSizeKey(f, sz)] ?? 0);
+                                const chosen = chosenSize === sz;
+                                return (
+                                  <button key={sz} onClick={() => setFlavorSize(f, sz)}
+                                    style={{ ...btnBase, flex: 1, flexDirection: "column", padding: "8px 0", borderRadius: 8,
+                                      border: `1.5px solid ${chosen ? s.gold : s.border}`,
+                                      backgroundColor: chosen ? s.gold : "none",
+                                      color: chosen ? "#ffffff" : s.text }}>
+                                    <span style={{ fontWeight: 700, fontSize: 13 }}>{sz}</span>
+                                    <span style={{ fontSize: 9, fontWeight: 600, color: chosen ? "#ffffffcc" : (bal <= 0 ? "#e57373" : s.muted) }}>
+                                      ост. {bal}
+                                    </span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           </div>
                         );
@@ -444,54 +487,69 @@ export default function CashierPage() {
                     </div>
                     <div style={{ display: "flex", gap: 12 }}>
                       <button onClick={() => setStep(1)} style={{ ...btnBase, flex: 1, backgroundColor: s.border, borderRadius: 12, padding: "14px", color: s.muted, fontSize: 15 }}>← Назад</button>
-                      <button onClick={() => setStep(3)} style={{ ...btnBase, flex: 2, backgroundColor: s.gold, borderRadius: 12, padding: "14px", color: "#ffffff", fontWeight: 700, fontSize: 16 }}>Далее →</button>
+                      <button onClick={() => setStep(3)} disabled={!allSizesChosen}
+                        style={{ ...btnBase, flex: 2, backgroundColor: allSizesChosen ? s.gold : s.border, borderRadius: 12, padding: "14px",
+                          color: allSizesChosen ? "#ffffff" : s.muted, fontWeight: 700, fontSize: 16 }}>
+                        Далее →
+                      </button>
                     </div>
                   </div>
                 )}
 
-                {/* Step 3: Size (optional) + confirm */}
-                {step === 3 && (
+                {/* Step 3: Confirm */}
+                {step === 3 && (() => {
+                  const today2 = new Date().toISOString().slice(0, 10);
+                  const isPreOrder = orderDate > today2;
+                  const dateLabel = isPreOrder
+                    ? new Date(orderDate + "T12:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
+                    : "Сегодня";
+                  return (
                   <div>
-                    <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 8, textAlign: "center" }}>Размер</h2>
-                    <p style={{ color: s.muted, fontSize: 13, textAlign: "center", marginBottom: 16 }}>Необязательно — можно пропустить</p>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
-                      {SIZES.map((sz) => (
-                        <button key={sz} onClick={() => { setSize(size === sz ? null : sz); if (sz !== "Другое") setCustomSize(""); }}
-                          style={{ ...btnBase, backgroundColor: size === sz ? s.gold : s.card, border: `2px solid ${size === sz ? s.gold : s.border}`,
-                            borderRadius: 14, padding: "24px 8px", color: size === sz ? "#ffffff" : s.text,
-                            fontSize: 18, fontWeight: 700, minHeight: 80 }}>
-                          {sz}
-                        </button>
-                      ))}
-                    </div>
-                    {size === "Другое" && (
-                      <input autoFocus placeholder="Вес или размер (напр. 1 кг, 20 см)..." value={customSize} onChange={(e) => setCustomSize(e.target.value)}
-                        style={{ width: "100%", backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 10, padding: "12px 16px",
-                          color: s.text, fontSize: 15, outline: "none", boxSizing: "border-box", marginBottom: 12, textAlign: "center" }} />
-                    )}
-                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 16, marginBottom: 20 }}>
+                    <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 16, textAlign: "center" }}>Подтверждение</h2>
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 16, marginBottom: 16 }}>
                       <div style={{ color: s.muted, fontSize: 12, marginBottom: 8 }}>Итог заказа</div>
                       <div style={{ fontSize: 14, lineHeight: 2 }}>
                         <div><span style={{ color: s.muted }}>Вкус:</span> <strong>{finalFlavor}</strong></div>
                         <div><span style={{ color: s.muted }}>Клиент:</span> <strong>{isWalkIn ? (walkInName || "Физ. лицо") : selectedClient?.name}</strong></div>
                         <div><span style={{ color: s.muted }}>Количество:</span> <strong>{totalQuantity} шт</strong></div>
-                        {size && <div><span style={{ color: s.muted }}>Размер:</span> <strong>{finalSize || size}</strong></div>}
                         {isWalkIn && walkInAmount && (
                           <div><span style={{ color: s.muted }}>Сумма:</span> <strong style={{ color: s.gold }}>{walkInAmount} ₸</strong></div>
                         )}
                       </div>
                     </div>
+
+                    {/* Date picker */}
+                    <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 16, marginBottom: 16, border: isPreOrder ? `2px solid ${s.gold}` : `1px solid ${s.border}` }}>
+                      <div style={{ color: s.muted, fontSize: 12, marginBottom: 8 }}>
+                        {isPreOrder ? "Предзаказ — дата выдачи" : "Дата выдачи"}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <input type="date" value={orderDate} min={today2}
+                          onChange={(e) => setOrderDate(e.target.value || today2)}
+                          style={{ flex: 1, backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: 8, padding: "10px 12px", color: s.text, fontSize: 15, outline: "none" }} />
+                        <span style={{ fontWeight: 700, color: isPreOrder ? s.gold : s.muted, fontSize: 14, whiteSpace: "nowrap" as const }}>
+                          {dateLabel}
+                        </span>
+                      </div>
+                      {isPreOrder && (
+                        <div style={{ marginTop: 8, padding: "6px 10px", background: `${s.gold}12`, borderRadius: 8, fontSize: 12, color: s.gold, fontWeight: 600 }}>
+                          Предзаказ — появится в разделе «Предзаказы»
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{ display: "flex", gap: 12 }}>
                       <button onClick={() => setStep(2)} style={{ ...btnBase, flex: 1, backgroundColor: s.border, borderRadius: 12, padding: "14px", color: s.muted, fontSize: 15 }}>← Назад</button>
-                      <button onClick={saveOrder} disabled={saving || (size === "Другое" && !customSize)}
-                        style={{ ...btnBase, flex: 2, backgroundColor: (saving || (size === "Другое" && !customSize)) ? s.border : "#4caf50",
+                      <button onClick={saveOrder} disabled={saving}
+                        style={{ ...btnBase, flex: 2, backgroundColor: saving ? s.border : (isPreOrder ? s.gold : "#4caf50"),
                           borderRadius: 12, padding: "14px", fontWeight: 700, fontSize: 16,
-                          color: (saving || (size === "Другое" && !customSize)) ? s.muted : "#fff" }}>
-                        {saving ? "Сохранение..." : "✓ Принять заказ"}
+                          color: saving ? s.muted : "#fff" }}>
+                        {saving ? "Сохранение..." : isPreOrder ? "Принять предзаказ" : "✓ Принять заказ"}
                       </button>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </>
             )}
           </>
@@ -571,72 +629,107 @@ export default function CashierPage() {
         )}
 
         {/* ── TAB: Мои заказы ── */}
-        {mainTab === "orders" && (
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h2 style={{ color: s.gold, fontSize: 16, margin: 0 }}>Заказы сегодня</h2>
-              <button onClick={loadData} style={{ ...btnBase, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 14px", fontSize: 12 }}>Обновить</button>
-            </div>
-
-            {/* Status filter chips */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto", paddingBottom: 4 }}>
-              {([["all", "Все"], ["new", "Новые"], ["in_progress", "В работе"], ["done", "Готово"], ["delivered", "Доставлен"]] as const).map(([key, label]) => (
-                <button key={key} onClick={() => setOrderFilter(key)}
-                  style={{ ...btnBase, padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
-                    backgroundColor: orderFilter === key ? s.gold : s.card,
-                    color: orderFilter === key ? "#fff" : s.muted,
-                    border: `1px solid ${orderFilter === key ? s.gold : s.border}` }}>
-                  {label}
-                  {key !== "all" && (
-                    <span style={{ marginLeft: 5, opacity: 0.7 }}>
-                      {myOrders.filter((o) => (o.status || "new") === key).length}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {filteredOrders.length === 0 && <div style={{ color: s.muted, textAlign: "center", padding: "40px 0" }}>Нет заказов</div>}
-            {filteredOrders.map((o) => {
-              const st = (o.status in STATUSES) ? STATUSES[o.status] : STATUSES.new;
-              const canNext = o.status in STATUS_FLOW;
-              const canCancel = o.status !== "cancelled" && o.status !== "cancellation_requested";
-              return (
-                <div key={o.id} style={{ backgroundColor: s.card, borderRadius: 12, padding: 16, marginBottom: 12,
-                  border: `1px solid ${o.status === "cancellation_requested" ? "#ff9800" : s.border}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+        {mainTab === "orders" && (() => {
+          const renderOrderCard = (o: any, isPreOrder = false) => {
+            const st = (o.status in STATUSES) ? STATUSES[o.status as keyof typeof STATUSES] : STATUSES.new;
+            const canNext = o.status in STATUS_FLOW;
+            const canCancel = o.status !== "cancelled" && o.status !== "cancellation_requested";
+            const dateLabel = o.order_date ? new Date(o.order_date + "T12:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) : "";
+            return (
+              <div key={o.id} style={{ backgroundColor: s.card, borderRadius: 12, padding: 16, marginBottom: 12,
+                border: `1px solid ${isPreOrder ? s.gold + "66" : o.status === "cancellation_requested" ? "#ff9800" : s.border}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ color: s.gold, fontWeight: 700, fontSize: 15 }}>{o.client_name || "—"}</div>
-                      <div style={{ color: s.muted, fontSize: 13, marginTop: 4 }}>
-                        {o.cake_flavor || "—"} · {o.quantity || "—"} шт
-                        {o.notes && <span style={{ marginLeft: 8, color: s.muted }}>{o.notes}</span>}
-                      </div>
-                      {o.status === "cancellation_requested" && (
-                        <div style={{ color: "#ff9800", fontSize: 12, marginTop: 6 }}>Ожидает подтверждения: «{o.cancellation_reason}»</div>
-                      )}
-                      {o.status === "cancelled" && (
-                        <div style={{ color: "#e57373", fontSize: 12, marginTop: 6 }}>Отменён: «{o.cancellation_reason}»</div>
-                      )}
+                      {isPreOrder && <span style={{ fontSize: 11, fontWeight: 700, color: s.gold, background: `${s.gold}18`, borderRadius: 6, padding: "2px 7px" }}>{dateLabel}</span>}
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
+                    <div style={{ color: s.muted, fontSize: 13, marginTop: 4 }}>
+                      {o.cake_flavor || "—"} · {o.quantity || "—"} шт
+                      {o.notes && !o.notes.startsWith("Предзаказ") && <span style={{ marginLeft: 8 }}>{o.notes}</span>}
+                    </div>
+                    {o.status === "cancellation_requested" && (
+                      <div style={{ color: "#ff9800", fontSize: 12, marginTop: 6 }}>Ожидает подтверждения: «{o.cancellation_reason}»</div>
+                    )}
+                    {o.status === "cancelled" && (
+                      <div style={{ color: "#e57373", fontSize: 12, marginTop: 6 }}>Отменён: «{o.cancellation_reason}»</div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
+                    {isPreOrder ? (
+                      <button onClick={() => canNext && advanceStatus(o)} disabled={!canNext}
+                        style={{ ...btnBase, backgroundColor: s.gold, color: "#fff", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700,
+                          border: `1px solid ${s.gold}`, whiteSpace: "nowrap" }}>
+                        Пробить →
+                      </button>
+                    ) : (
                       <button onClick={() => canNext && advanceStatus(o)} disabled={!canNext}
                         style={{ ...btnBase, backgroundColor: `${st.color}22`, color: st.color, borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600,
                           border: `1px solid ${st.color}55`, whiteSpace: "nowrap" }}>
                         {st.label}{canNext ? " →" : ""}
                       </button>
-                      {canCancel && (
-                        <button onClick={() => { setCancelTarget(o); setCancelReason(""); }}
-                          style={{ ...btnBase, background: "none", border: "1px solid #e5737444", color: "#e57373", borderRadius: 8, padding: "5px 12px", fontSize: 12 }}>
-                          Отмена
-                        </button>
-                      )}
-                    </div>
+                    )}
+                    {canCancel && (
+                      <button onClick={() => { setCancelTarget(o); setCancelReason(""); }}
+                        style={{ ...btnBase, background: "none", border: "1px solid #e5737444", color: "#e57373", borderRadius: 8, padding: "5px 12px", fontSize: 12 }}>
+                        Отмена
+                      </button>
+                    )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              </div>
+            );
+          };
+
+          return (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h2 style={{ color: s.gold, fontSize: 16, margin: 0 }}>Мои заказы</h2>
+                <button onClick={loadData} style={{ ...btnBase, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 14px", fontSize: 12 }}>Обновить</button>
+              </div>
+
+              {/* Status filter chips */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto", paddingBottom: 4 }}>
+                {([["all", "Все"], ["new", "Новые"], ["in_progress", "В работе"], ["done", "Готово"], ["delivered", "Доставлен"]] as const).map(([key, label]) => (
+                  <button key={key} onClick={() => setOrderFilter(key)}
+                    style={{ ...btnBase, padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+                      backgroundColor: orderFilter === key ? s.gold : s.card,
+                      color: orderFilter === key ? "#fff" : s.muted,
+                      border: `1px solid ${orderFilter === key ? s.gold : s.border}` }}>
+                    {label}
+                    {key !== "all" && (
+                      <span style={{ marginLeft: 5, opacity: 0.7 }}>
+                        {todayOrders.filter((o) => (o.status || "new") === key).length}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Сегодня */}
+              <div style={{ color: s.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+                Сегодня — {new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
+              </div>
+              {filteredOrders.length === 0 && <div style={{ color: s.muted, textAlign: "center", padding: "20px 0" }}>Нет заказов на сегодня</div>}
+              {filteredOrders.map((o) => renderOrderCard(o, false))}
+
+              {/* Предзаказы */}
+              {preOrders.length > 0 && (
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                    <div style={{ color: s.gold, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
+                      Предзаказы
+                    </div>
+                    <span style={{ backgroundColor: `${s.gold}22`, color: s.gold, borderRadius: 10, fontSize: 11, padding: "2px 8px", fontWeight: 700 }}>
+                      {preOrders.length}
+                    </span>
+                  </div>
+                  {preOrders.map((o) => renderOrderCard(o, true))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Cancel modal */}
