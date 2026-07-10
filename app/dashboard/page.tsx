@@ -17,6 +17,44 @@ const PROD_FLAVORS = ["ВУПИ", "МОЛОЧКА", "ЯГОДНЫЙ", "НУТЕ�
 const FLAVOR_COLORS: Record<string, string> = { "ВУПИ": "#f06292", "МОЛОЧКА": "#64b5f6", "ЯГОДНЫЙ": "#81c784", "НУТЕЛЛА": "#a1887f", "СНИКЕРС": "#ffb74d", "СГУЩЕНКА ОРЕХ": "#e57373" };
 const PIE_COLORS_PROD = ["#c8a96e","#64b5f6","#81c784","#e57373","#f06292","#ffb74d"];
 
+const IconCake = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/>
+    <path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/>
+    <path d="M2 21h20"/>
+    <path d="M7 8v2"/>
+    <path d="M12 8v2"/>
+    <path d="M17 8v2"/>
+    <path d="M7 4h.01"/>
+    <path d="M12 4h.01"/>
+    <path d="M17 4h.01"/>
+  </svg>
+);
+const IconRefresh = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+    <path d="M21 3v5h-5"/>
+    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+    <path d="M8 16H3v5"/>
+  </svg>
+);
+const IconEdit = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+);
+const IconChevronLeft = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 18l-6-6 6-6"/>
+  </svg>
+);
+const IconChevronRight = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 18l6-6-6-6"/>
+  </svg>
+);
+
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState(null);
@@ -736,15 +774,15 @@ export default function Dashboard() {
     <div style={{ backgroundColor: s.bg, minHeight: "100vh", color: s.text, fontFamily: font }}>
       {/* Notification */}
       {notification && (
-        <div style={{ position: "fixed", top: 16, right: 16, backgroundColor: s.card, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", borderRadius: 10, padding: "12px 20px", zIndex: 1000, color: s.text, fontSize: 14, border: `1px solid ${s.border}` }}>
+        <div style={{ position: "fixed", top: isMobile ? "auto" : 16, bottom: isMobile ? 20 : "auto", right: isMobile ? 12 : 16, left: isMobile ? 12 : "auto", backgroundColor: s.card, boxShadow: "0 4px 20px rgba(0,0,0,0.14)", borderRadius: 12, padding: "13px 20px", zIndex: 1000, color: s.text, fontSize: 14, borderLeft: `4px solid ${s.gold}`, border: `1px solid ${s.border}`, borderLeftWidth: 4, fontWeight: 500 }}>
           {notification}
         </div>
       )}
 
       {/* Header */}
-      <div style={{ backgroundColor: s.card, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", padding: isMobile ? "12px 16px" : "14px 28px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 20 }}>🍰</span>
+      <div style={{ backgroundColor: s.card, boxShadow: "0 1px 3px rgba(0,0,0,0.08)", padding: isMobile ? "0 16px" : "0 28px", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 50, height: isMobile ? 52 : 56 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: s.gold }}>
+          <IconCake />
           <span style={{ color: s.gold, fontWeight: 700, fontSize: isMobile ? 15 : 17, letterSpacing: "-0.3px" }}>BerryCake</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -755,9 +793,15 @@ export default function Dashboard() {
               {syncing ? "Загрузка..." : "Обновить"}
             </button>
           )}
+          {isMobile && (
+            <button onClick={syncNow} disabled={syncing}
+              style={{ background: "none", border: `1px solid ${s.border}`, color: syncing ? s.border : s.muted, borderRadius: 8, padding: "9px 10px", cursor: syncing ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 44, minHeight: 44 }}>
+              <IconRefresh />
+            </button>
+          )}
           {!isMobile && <span style={{ color: s.muted, fontSize: 13 }}>{user.name}</span>}
           <button onClick={() => { localStorage.removeItem("bc_auth"); router.replace("/login"); }}
-            style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: isMobile ? "6px 10px" : "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: isMobile ? 12 : 13 }}>
+            style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: isMobile ? "0 12px" : "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: isMobile ? 13 : 13, minHeight: 44, display: "flex", alignItems: "center" }}>
             Выйти
           </button>
         </div>
@@ -827,18 +871,18 @@ export default function Dashboard() {
           return (
             <>
               {/* Month navigation */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 28 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 28 }}>
                 <button onClick={prevMonth}
-                  style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>
-                  ‹
+                  style={{ background: s.card, border: `1px solid ${s.border}`, color: s.muted, borderRadius: 10, width: 44, height: 44, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: s.sh }}>
+                  <IconChevronLeft />
                 </button>
-                <div style={{ textAlign: "center" }}>
+                <div style={{ textAlign: "center", minWidth: 180 }}>
                   <div style={{ color: s.gold, fontWeight: 700, fontSize: 20, textTransform: "capitalize" }}>{monthLabel}</div>
                   {isCurrentMonth && <div style={{ color: s.muted, fontSize: 11, marginTop: 2 }}>текущий месяц</div>}
                 </div>
                 <button onClick={nextMonth} disabled={isCurrentMonth}
-                  style={{ background: "none", border: `1px solid ${isCurrentMonth ? s.bg : s.border}`, color: isCurrentMonth ? s.bg : s.muted, borderRadius: 8, padding: "6px 16px", cursor: isCurrentMonth ? "default" : "pointer", fontSize: 20, lineHeight: 1 }}>
-                  ›
+                  style={{ background: s.card, border: `1px solid ${isCurrentMonth ? s.border : s.border}`, color: isCurrentMonth ? s.border : s.muted, borderRadius: 10, width: 44, height: 44, cursor: isCurrentMonth ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: isCurrentMonth ? 0.35 : 1, boxShadow: s.sh }}>
+                  <IconChevronRight />
                 </button>
               </div>
 
@@ -1140,8 +1184,8 @@ export default function Dashboard() {
                           {c.phone && <div style={{ color: s.muted, fontSize: 13, marginTop: 2 }}>{c.phone}</div>}
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
-                          <button onClick={() => openEditClient(c)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14 }}>✏️</button>
-                          <button onClick={() => { if (confirm("Удалить клиента?")) deleteClient(c.id); }} style={{ background: "none", border: "1px solid #f8717144", color: "#f87171", padding: "6px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14 }}>✕</button>
+                          <button onClick={() => openEditClient(c)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: "0 12px", borderRadius: 8, cursor: "pointer", minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}><IconEdit /></button>
+                          <button onClick={() => { if (confirm("Удалить клиента?")) deleteClient(c.id); }} style={{ background: "none", border: "1px solid #f8717144", color: "#f87171", padding: "0 12px", borderRadius: 8, cursor: "pointer", fontSize: 14, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -1190,7 +1234,7 @@ export default function Dashboard() {
                           <td style={{ padding: "10px 14px", color: s.muted, fontSize: 12 }}>{c.notes || "—"}</td>
                           <td style={{ padding: "10px 14px" }}>
                             <div style={{ display: "flex", gap: 8 }}>
-                              <button onClick={() => openEditClient(c)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.text, padding: "3px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✏️</button>
+                              <button onClick={() => openEditClient(c)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: "0 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", height: 32 }}><IconEdit /></button>
                               <button onClick={() => { if (confirm("Удалить клиента?")) deleteClient(c.id); }} style={{ background: "none", border: `1px solid ${s.border}`, color: "#f87171", padding: "3px 10px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}>✕</button>
                             </div>
                           </td>
@@ -1286,14 +1330,18 @@ export default function Dashboard() {
           return (
             <div>
               {/* Month navigation */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 24 }}>
-                <button onClick={prevExpMonth} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>‹</button>
-                <div style={{ textAlign: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 24 }}>
+                <button onClick={prevExpMonth} style={{ background: s.card, border: `1px solid ${s.border}`, color: s.muted, borderRadius: 10, width: 44, height: 44, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: s.sh }}>
+                  <IconChevronLeft />
+                </button>
+                <div style={{ textAlign: "center", minWidth: 180 }}>
                   <div style={{ color: s.gold, fontWeight: 700, fontSize: 20, textTransform: "capitalize" }}>{expMonthLabel}</div>
                   {isCurrentExpMonth && <div style={{ color: s.muted, fontSize: 11, marginTop: 2 }}>текущий месяц</div>}
                 </div>
                 <button onClick={nextExpMonth} disabled={isCurrentExpMonth}
-                  style={{ background: "none", border: `1px solid ${isCurrentExpMonth ? s.bg : s.border}`, color: isCurrentExpMonth ? s.bg : s.muted, borderRadius: 8, padding: "6px 16px", cursor: isCurrentExpMonth ? "default" : "pointer", fontSize: 20, lineHeight: 1 }}>›</button>
+                  style={{ background: s.card, border: `1px solid ${s.border}`, color: s.muted, borderRadius: 10, width: 44, height: 44, cursor: isCurrentExpMonth ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: isCurrentExpMonth ? 0.35 : 1, boxShadow: s.sh }}>
+                  <IconChevronRight />
+                </button>
               </div>
 
               {/* Stat cards */}
@@ -1868,14 +1916,18 @@ export default function Dashboard() {
               {/* ── SUB 0: Обзор цеха ── */}
               {prodSubTab === 0 && (
                 <>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginBottom: 24 }}>
-                    <button onClick={prevProdMonth} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 16px", cursor: "pointer", fontSize: 20 }}>‹</button>
-                    <div style={{ textAlign: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 24 }}>
+                    <button onClick={prevProdMonth} style={{ background: s.card, border: `1px solid ${s.border}`, color: s.muted, borderRadius: 10, width: 44, height: 44, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: s.sh }}>
+                      <IconChevronLeft />
+                    </button>
+                    <div style={{ textAlign: "center", minWidth: 180 }}>
                       <div style={{ color: s.gold, fontWeight: 700, fontSize: 20, textTransform: "capitalize" }}>{prodMonthLabel}</div>
                       {isCurrentProdMonth && <div style={{ color: s.muted, fontSize: 11, marginTop: 2 }}>текущий месяц</div>}
                     </div>
                     <button onClick={nextProdMonth} disabled={isCurrentProdMonth}
-                      style={{ background: "none", border: `1px solid ${isCurrentProdMonth ? s.bg : s.border}`, color: isCurrentProdMonth ? s.bg : s.muted, borderRadius: 8, padding: "6px 16px", cursor: isCurrentProdMonth ? "default" : "pointer", fontSize: 20 }}>›</button>
+                      style={{ background: s.card, border: `1px solid ${s.border}`, color: s.muted, borderRadius: 10, width: 44, height: 44, cursor: isCurrentProdMonth ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: isCurrentProdMonth ? 0.35 : 1, boxShadow: s.sh }}>
+                      <IconChevronRight />
+                    </button>
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
@@ -1974,7 +2026,7 @@ export default function Dashboard() {
                                   <div style={{ color: s.muted, fontSize: 12, marginTop: 2 }}>Выход: {r.yield_count} шт с замеса</div>
                                 </div>
                                 <div style={{ display: "flex", gap: 6 }}>
-                                  <button onClick={() => openEditRecipe(r)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✏️</button>
+                                  <button onClick={() => openEditRecipe(r)} style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "0 10px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", height: 30 }}><IconEdit /></button>
                                   <button onClick={() => deleteRecipe(r.id)} style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
                                 </div>
                               </div>
@@ -2092,7 +2144,7 @@ export default function Dashboard() {
                                           + Приход
                                         </button>
                                         <button onClick={() => { setEditingProduct(p); setProductForm({ name: p.name, unit: p.unit, category: p.category, notes: p.notes || "" }); setShowProductModal(true); }}
-                                          style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>✏️</button>
+                                          style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "0 10px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", height: 30 }}><IconEdit /></button>
                                         <button onClick={() => deleteProduct(p.id)}
                                           style={{ background: "none", border: "1px solid #e5737344", color: "#e57373", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 12 }}>✕</button>
                                       </div>
