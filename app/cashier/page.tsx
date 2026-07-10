@@ -45,8 +45,6 @@ export default function CashierPage() {
   // Cake order state
   const [step, setStep] = useState(0);
   const [flavors, setFlavors] = useState<string[]>([]);
-  const [customFlavor, setCustomFlavor] = useState("");
-  const [showCustom, setShowCustom] = useState(false);
   const [clientQuery, setClientQuery] = useState("");
   const [clientSuggestions, setClientSuggestions] = useState<any[]>([]);
   const [selectedClient, setSelectedClient] = useState<any>(null);
@@ -110,7 +108,7 @@ export default function CashierPage() {
   }, [clientQuery, clients]);
 
   const reset = () => {
-    setStep(0); setFlavors([]); setCustomFlavor(""); setShowCustom(false);
+    setStep(0); setFlavors([]);
     setClientQuery(""); setSelectedClient(null); setIsWalkIn(false);
     setWalkInName(""); setWalkInAmount(""); setFlavorQtys({});
     setSize(null); setCustomSize(""); setDone(false);
@@ -119,13 +117,12 @@ export default function CashierPage() {
   const toggleFlavor = (f: string) =>
     setFlavors((prev) => prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]);
 
-  const selectedFlavorList = [...flavors, ...(showCustom && customFlavor.trim() ? [customFlavor.trim()] : [])];
   const setFlavorQty = (name: string, qty: number) =>
     setFlavorQtys((prev) => ({ ...prev, [name]: Math.max(1, qty) }));
-  const totalQuantity = selectedFlavorList.reduce((sum, f) => sum + (flavorQtys[f] ?? 1), 0);
-  const finalFlavor = selectedFlavorList.length > 1
-    ? selectedFlavorList.map((f) => `${f} ×${flavorQtys[f] ?? 1}`).join(" + ")
-    : selectedFlavorList.join(" + ");
+  const totalQuantity = flavors.reduce((sum, f) => sum + (flavorQtys[f] ?? 1), 0);
+  const finalFlavor = flavors.length > 1
+    ? flavors.map((f) => `${f} ×${flavorQtys[f] ?? 1}`).join(" + ")
+    : flavors.join(" + ");
   const finalSize = size === "Другое" ? (customSize || null) : size;
 
   const saveOrder = async () => {
@@ -308,19 +305,7 @@ export default function CashierPage() {
                           </button>
                         );
                       })}
-                      <button onClick={() => setShowCustom((v) => !v)}
-                        style={{ ...btnBase, backgroundColor: showCustom ? "#11182715" : s.card,
-                          border: `2px dashed ${showCustom ? s.gold : s.border}`,
-                          borderRadius: 14, padding: "18px 10px", color: showCustom ? s.gold : s.muted,
-                          fontSize: 12, minHeight: 70 }}>
-                        + Другой
-                      </button>
                     </div>
-                    {showCustom && (
-                      <input autoFocus placeholder="Введите вкус..." value={customFlavor} onChange={(e) => setCustomFlavor(e.target.value)}
-                        style={{ width: "100%", backgroundColor: s.card, border: `1px solid ${s.gold}`, borderRadius: 10, padding: "12px 16px",
-                          color: s.text, fontSize: 15, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
-                    )}
                     {finalFlavor && (
                       <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 13 }}>
                         <span style={{ color: "#166534", fontWeight: 600 }}>Выбрано: </span>
@@ -400,11 +385,11 @@ export default function CashierPage() {
                   <div>
                     <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 20, textAlign: "center" }}>Количество</h2>
                     <div style={{ backgroundColor: s.card, borderRadius: 12, marginBottom: 16, overflow: "hidden" }}>
-                      {selectedFlavorList.map((f, i) => {
+                      {flavors.map((f, i) => {
                         const qty = flavorQtys[f] ?? 1;
                         return (
                           <div key={f} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                            padding: "14px 20px", borderBottom: i < selectedFlavorList.length - 1 ? `1px solid ${s.border}` : "none" }}>
+                            padding: "14px 20px", borderBottom: i < flavors.length - 1 ? `1px solid ${s.border}` : "none" }}>
                             <div style={{ color: s.text, fontWeight: 600, fontSize: 15 }}>{f}</div>
                             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                               <button onClick={() => setFlavorQty(f, qty - 1)}
