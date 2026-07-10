@@ -32,8 +32,6 @@ export default function BrandbookPage() {
   useEffect(() => {
     const auth = localStorage.getItem("bc_auth");
     if (!auth) { router.replace("/login"); return; }
-    const { role } = JSON.parse(auth);
-    if (role !== "admin" && role !== "manager") router.replace("/dashboard");
   }, []);
 
   const copy = (hex: string) => {
