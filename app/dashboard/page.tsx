@@ -129,13 +129,13 @@ export default function Dashboard() {
       result[key] = { base: sampleUnit, purchased: 0, consumed: 0, expected: 0 };
     });
 
-    // Purchases: match expense description to ingredient name
+    // Purchases: match expense description to ingredient name (same logic as nameMatches)
     expenses.forEach((e) => {
       if (e.category !== "ингредиенты" || !e.quantity_amount) return;
-      const descLower = (e.description || "").toLowerCase();
       ingredientKeys.forEach((key) => {
-        const keyLower = key.toLowerCase();
-        if (descLower.includes(keyLower) || keyLower.split(" ").some((w: string) => w.length > 3 && descLower.includes(w))) {
+        const n = key.toLowerCase().trim();
+        const d = (e.description || "").toLowerCase().trim();
+        if (d.includes(n) || n.includes(d) || n.split(" ").some((w: string) => w.length > 3 && d.includes(w))) {
           const { val } = toBaseUnit(parseFloat(e.quantity_amount) || 0, e.unit || "г");
           result[key].purchased += val;
         }
@@ -159,20 +159,34 @@ export default function Dashboard() {
     return result;
   };
 
+  // Unified name matching helper — used in both stock functions
+  const nameMatches = (ingredientName: string, expenseDesc: string): boolean => {
+    const n = ingredientName.toLowerCase().trim();
+    const d = (expenseDesc || "").toLowerCase().trim();
+    return d.includes(n) || n.includes(d) || n.split(" ").some((w) => w.length > 3 && d.includes(w));
+  };
+
   const calcShoppingList = (stock: ReturnType<typeof calcExpectedStock>) => {
     const today = new Date().toISOString().slice(0, 10);
     const upcoming = orders.filter((o) => (o.order_date || "") >= today && !["cancelled","delivered"].includes(o.status || ""));
     const needed: Record<string, { base: string; required: number }> = {};
 
     upcoming.forEach((o) => {
-      const recipe = recipes.find((r) => r.flavor === o.cake_flavor);
-      if (!recipe) return;
+      // Support combo flavors: "ВУПИ + НУТЕЛЛА" → ["ВУПИ", "НУТЕЛЛА"]
+      const flavorParts = (o.cake_flavor || "").split(" + ").map((f: string) => f.trim()).filter(Boolean);
       const qty = o.quantity || 1;
-      (recipe.ingredients || []).forEach((ing: any) => {
-        if (!ing.name || !ing.amount) return;
-        if (!needed[ing.name]) needed[ing.name] = { base: toBaseUnit(0, ing.unit || "г").base, required: 0 };
-        const { val } = toBaseUnit(parseFloat(ing.amount) * qty, ing.unit || "г");
-        needed[ing.name].required += val;
+
+      flavorParts.forEach((flavorPart: string) => {
+        const recipe = recipes.find((r) => r.flavor === flavorPart);
+        if (!recipe) return;
+        // For combos split quantity equally per flavor
+        const partQty = qty / flavorParts.length;
+        (recipe.ingredients || []).forEach((ing: any) => {
+          if (!ing.name || !ing.amount) return;
+          if (!needed[ing.name]) needed[ing.name] = { base: toBaseUnit(0, ing.unit || "г").base, required: 0 };
+          const { val } = toBaseUnit(parseFloat(ing.amount) * partQty, ing.unit || "г");
+          needed[ing.name].required += val;
+        });
       });
     });
 
@@ -286,9 +300,9 @@ export default function Dashboard() {
     let purchased = 0;
     expenses.forEach((e) => {
       if (!e.quantity_amount) return;
-      const desc = (e.description || "").toLowerCase();
-      const name = product.name.toLowerCase();
-      if (desc.includes(name) || name.includes(desc)) {
+      const n = product.name.toLowerCase().trim();
+      const d = (e.description || "").toLowerCase().trim();
+      if (d.includes(n) || n.includes(d) || n.split(" ").some((w: string) => w.length > 3 && d.includes(w))) {
         const { val } = toBaseUnit(parseFloat(e.quantity_amount) || 0, e.unit || product.unit);
         purchased += val;
       }
@@ -300,9 +314,9 @@ export default function Dashboard() {
       const batches = (p.quantity || 0) / (recipe.yield_count || 1);
       (recipe.ingredients || []).forEach((ing: any) => {
         if (!ing.name || !ing.amount) return;
-        const ingName = ing.name.toLowerCase();
-        const prodName = product.name.toLowerCase();
-        if (ingName.includes(prodName) || prodName.includes(ingName)) {
+        const n = product.name.toLowerCase().trim();
+        const d = ing.name.toLowerCase().trim();
+        if (d.includes(n) || n.includes(d) || n.split(" ").some((w: string) => w.length > 3 && d.includes(w))) {
           const { val } = toBaseUnit(parseFloat(ing.amount) * batches, ing.unit || product.unit);
           consumed += val;
         }
@@ -403,7 +417,7 @@ export default function Dashboard() {
   };
 
   const fetchProduction = async () => {
-    const { data } = await supabase.from("berrycake_production").select("*").order("bake_date", { ascending: false }).limit(500);
+    const { data } = await supabase.from("berrycake_production").select("*").order("bake_date", { ascending: false }).limit(2000);
     if (data) setProduction(data);
   };
 
@@ -443,12 +457,22 @@ export default function Dashboard() {
       .from("berrycake_expenses")
       .select("*")
       .order("expense_date", { ascending: false })
-      .limit(300);
+      .limit(2000);
     if (data) setExpenses(data);
+  };
+
+  const markPaid = async (order: any) => {
+    if (!order.total_amount) return;
+    await supabase.from("berrycake_orders").update({ paid_amount: order.total_amount }).eq("id", order.id);
+    setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, paid_amount: order.total_amount } : o));
   };
 
   const addExpense = async () => {
     if (!expForm.description || !expForm.amount) return;
+    if ((expForm.category === "ингредиенты" || expForm.category === "упаковка") && !expForm.quantity_amount) {
+      alert("Для категории «" + expForm.category + "» обязательно укажите количество — иначе остаток склада не обновится.");
+      return;
+    }
     setExpSaving(true);
     try {
       const payload: any = {
@@ -791,6 +815,15 @@ export default function Dashboard() {
           });
           const mFlavors = Object.entries(mFlavorMap).map(([flavor, count]) => ({ flavor, count })).sort((a, b) => b.count - a.count);
 
+          // Financial summary for selected month
+          const mRevenue = mOrders
+            .filter((o) => !["cancelled"].includes(o.status || ""))
+            .reduce((s, o) => s + (o.total_amount || 0), 0);
+          const mExpensesTotal = expenses
+            .filter((e) => e.expense_date?.startsWith(selectedMonth))
+            .reduce((s, e) => s + (e.amount || 0), 0);
+          const mProfit = mRevenue - mExpensesTotal;
+
           return (
             <>
               {/* Month navigation */}
@@ -809,6 +842,20 @@ export default function Dashboard() {
                 </button>
               </div>
 
+              {/* Financial KPIs */}
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3,1fr)", gap: isMobile ? 10 : 16, marginBottom: 16 }}>
+                {[
+                  { label: "Выручка", val: mRevenue > 0 ? `${mRevenue.toLocaleString("ru-RU")} ₸` : "—", color: "#81c784", border: "#81c784" },
+                  { label: "Расходы", val: mExpensesTotal > 0 ? `${mExpensesTotal.toLocaleString("ru-RU")} ₸` : "—", color: "#e57373", border: "#e57373" },
+                  { label: "Прибыль", val: (mRevenue > 0 || mExpensesTotal > 0) ? `${mProfit.toLocaleString("ru-RU")} ₸` : "—", color: mProfit >= 0 ? s.gold : "#e57373", border: mProfit >= 0 ? s.gold : "#e57373" },
+                ].map((st) => (
+                  <div key={st.label} style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? "14px 12px" : 20, boxShadow: s.sh, borderLeft: `3px solid ${st.border}` }}>
+                    <div style={{ color: s.muted, fontSize: 12, marginBottom: 6 }}>{st.label} {monthLabel.split(" ")[0]}</div>
+                    <div style={{ color: st.color, fontSize: isMobile ? 20 : 26, fontWeight: 700 }}>{st.val}</div>
+                  </div>
+                ))}
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)", gap: isMobile ? 10 : 16, marginBottom: 32 }}>
                 {[
                   ["Заказов за месяц", mOrders.length],
@@ -816,9 +863,9 @@ export default function Dashboard() {
                   ["Заказов сегодня", todayStats.orders],
                   ["Тортов сегодня", todayStats.cakes],
                 ].map(([label, val]) => (
-                  <div key={label} style={{ backgroundColor: s.card, borderRadius: 12, padding: 20, boxShadow: s.sh, borderLeft: "3px solid #111827" }}>
+                  <div key={label} style={{ backgroundColor: s.card, borderRadius: 12, padding: isMobile ? "14px 12px" : 20, boxShadow: s.sh, borderLeft: "3px solid #111827" }}>
                     <div style={{ color: s.muted, fontSize: 12, marginBottom: 8 }}>{label}</div>
-                    <div style={{ color: s.gold, fontSize: 32, fontWeight: 700 }}>{val}</div>
+                    <div style={{ color: s.gold, fontSize: isMobile ? 22 : 32, fontWeight: 700 }}>{val}</div>
                   </div>
                 ))}
               </div>
@@ -968,7 +1015,13 @@ export default function Dashboard() {
                         <span style={{ color: s.muted, fontSize: 12 }}>{o.order_date || o.created_at?.slice(0,10) || "—"}{o.order_time ? ` ${o.order_time}` : ""}</span>
                         {o.total_amount ? <span style={{ color: s.gold, fontWeight: 600, fontSize: 13 }}>{Number(o.total_amount).toLocaleString("ru-RU")} ₸</span> : null}
                         {o.address ? <span style={{ color: s.muted, fontSize: 12 }}>{o.address}</span> : null}
-                        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {o.total_amount > 0 && (o.paid_amount || 0) < o.total_amount && (
+                            <button onClick={() => markPaid(o)}
+                              style={{ background: "#22c55e22", border: "1px solid #22c55e88", color: "#16a34a", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                              Оплачено
+                            </button>
+                          )}
                           <button onClick={() => openEditOrder(o)}
                             style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12 }}>
                             ✎
@@ -1014,6 +1067,12 @@ export default function Dashboard() {
                             </select>
                           </td>
                           <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                            {o.total_amount > 0 && (o.paid_amount || 0) < o.total_amount && (
+                              <button onClick={() => markPaid(o)}
+                                style={{ background: "#22c55e22", border: "1px solid #22c55e88", color: "#16a34a", borderRadius: 6, padding: "3px 8px", cursor: "pointer", fontSize: 12, fontWeight: 600, marginRight: 6 }}>
+                                Оплачено
+                              </button>
+                            )}
                             <button onClick={() => openEditOrder(o)}
                               style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12, marginRight: 6 }}>
                               ✎
