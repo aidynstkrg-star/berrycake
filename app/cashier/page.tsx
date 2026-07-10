@@ -291,21 +291,27 @@ export default function CashierPage() {
                   <div>
                     <h2 style={{ color: s.gold, fontSize: 18, marginBottom: 6, textAlign: "center" }}>Выберите вкус(ы)</h2>
                     <p style={{ color: s.muted, fontSize: 13, textAlign: "center", marginBottom: 20 }}>Можно выбрать несколько для комбо-торта</p>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
-                      {dbFlavors.map((f) => {
-                        const sel = flavors.includes(f);
-                        return (
-                          <button key={f} onClick={() => toggleFlavor(f)}
-                            style={{ ...btnBase, backgroundColor: sel ? s.gold : s.card, border: `2px solid ${sel ? s.gold : s.border}`,
-                              borderRadius: 14, padding: "18px 10px", color: sel ? "#ffffff" : s.text,
-                              fontSize: 12, fontWeight: 700, textAlign: "center", lineHeight: 1.3, minHeight: 70,
-                              position: "relative", flexDirection: "column" }}>
-                            {sel && <span style={{ position: "absolute", top: 5, right: 8, fontSize: 13 }}>✓</span>}
-                            {f}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {dbFlavors.length === 0 ? (
+                      <div style={{ backgroundColor: s.card, borderRadius: 12, padding: 32, textAlign: "center", color: s.muted, marginBottom: 14 }}>
+                        Нет доступных вкусов. Добавьте их в разделе «Персонал → Тех карты» дашборда.
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
+                        {dbFlavors.map((f) => {
+                          const sel = flavors.includes(f);
+                          return (
+                            <button key={f} onClick={() => toggleFlavor(f)}
+                              style={{ ...btnBase, backgroundColor: sel ? s.gold : s.card, border: `2px solid ${sel ? s.gold : s.border}`,
+                                borderRadius: 14, padding: "18px 10px", color: sel ? "#ffffff" : s.text,
+                                fontSize: 12, fontWeight: 700, textAlign: "center", lineHeight: 1.3, minHeight: 70,
+                                position: "relative", flexDirection: "column" }}>
+                              {sel && <span style={{ position: "absolute", top: 5, right: 8, fontSize: 13 }}>✓</span>}
+                              {f}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     {finalFlavor && (
                       <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 13 }}>
                         <span style={{ color: "#166534", fontWeight: 600 }}>Выбрано: </span>
