@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { calcFlavorBalance } from "@/lib/flavorStock";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -72,6 +73,7 @@ export default function CashierPage() {
   const [myOrders, setMyOrders] = useState<any[]>([]);
   const [dbFlavors, setDbFlavors] = useState<string[]>([]);
   const [accessories, setAccessories] = useState<any[]>([]);
+  const [flavorBalance, setFlavorBalance] = useState<Record<string, number>>({});
 
   // Cancel modal
   const [cancelTarget, setCancelTarget] = useState<any>(null);
@@ -89,16 +91,19 @@ export default function CashierPage() {
 
   const loadData = async () => {
     const today = new Date().toISOString().slice(0, 10);
-    const [clientsRes, ordersRes, flavorsRes, accRes] = await Promise.all([
+    const [clientsRes, ordersRes, flavorsRes, accRes, allOrdersRes, productionRes] = await Promise.all([
       supabase.from("berrycake_clients").select("id,name,phone,price_per_unit,client_type").order("name"),
       supabase.from("berrycake_orders").select("*").gte("created_at", today + "T00:00:00Z").order("created_at", { ascending: false }),
       supabase.from("berrycake_flavors").select("name").eq("active", true).order("sort_order"),
       supabase.from("berrycake_accessories").select("*").eq("active", true).order("sort_order"),
+      supabase.from("berrycake_orders").select("cake_flavor,quantity,status").neq("status", "cancelled"),
+      supabase.from("berrycake_production").select("flavor,quantity,defects"),
     ]);
     if (clientsRes.data) setClients(clientsRes.data);
     if (ordersRes.data) setMyOrders(ordersRes.data);
     if (flavorsRes.data) setDbFlavors(flavorsRes.data.map((f: any) => f.name));
     if (accRes.data) setAccessories(accRes.data);
+    if (allOrdersRes.data && productionRes.data) setFlavorBalance(calcFlavorBalance(productionRes.data, allOrdersRes.data));
   };
 
   useEffect(() => {
@@ -299,6 +304,8 @@ export default function CashierPage() {
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
                         {dbFlavors.map((f) => {
                           const sel = flavors.includes(f);
+                          const balance = Math.round(flavorBalance[f] ?? 0);
+                          const low = balance <= 0;
                           return (
                             <button key={f} onClick={() => toggleFlavor(f)}
                               style={{ ...btnBase, backgroundColor: sel ? s.gold : s.card, border: `2px solid ${sel ? s.gold : s.border}`,
@@ -307,6 +314,10 @@ export default function CashierPage() {
                                 position: "relative", flexDirection: "column" }}>
                               {sel && <span style={{ position: "absolute", top: 5, right: 8, fontSize: 13 }}>✓</span>}
                               {f}
+                              <span style={{ fontSize: 10, fontWeight: 600, marginTop: 4,
+                                color: sel ? "#ffffffcc" : (low ? "#e57373" : s.muted) }}>
+                                Остаток: {balance}
+                              </span>
                             </button>
                           );
                         })}
@@ -355,7 +366,6 @@ export default function CashierPage() {
                           <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: "12px 16px", marginBottom: 12, fontSize: 13 }}>
                             <span style={{ color: "#166534", fontWeight: 700 }}>✓ {selectedClient.name}</span>
                             <span style={{ color: s.muted, marginLeft: 10 }}>{selectedClient.client_type}</span>
-                            {selectedClient.price_per_unit && <span style={{ color: s.gold, marginLeft: 10, fontWeight: 600 }}>{selectedClient.price_per_unit} ₸/шт</span>}
                           </div>
                         )}
                         <button onClick={() => setIsWalkIn(true)}
@@ -397,14 +407,31 @@ export default function CashierPage() {
                           <div key={f} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
                             padding: "14px 20px", borderBottom: i < flavors.length - 1 ? `1px solid ${s.border}` : "none" }}>
                             <div style={{ color: s.text, fontWeight: 600, fontSize: 15 }}>{f}</div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               <button onClick={() => setFlavorQty(f, qty - 1)}
-                                style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.border}`, background: "none", color: s.text, fontSize: 20 }}>
+                                style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.border}`, background: "none", color: s.text, fontSize: 20, flexShrink: 0 }}>
                                 −
                               </button>
-                              <span style={{ color: s.gold, fontWeight: 700, fontSize: 18, minWidth: 24, textAlign: "center" }}>{qty}</span>
+                              <input
+                                type="number"
+                                min="1"
+                                inputMode="numeric"
+                                value={qty}
+                                onChange={(e) => {
+                                  const v = parseInt(e.target.value, 10);
+                                  if (!isNaN(v)) setFlavorQty(f, v);
+                                  else if (e.target.value === "") setFlavorQty(f, 1);
+                                }}
+                                style={{
+                                  width: 44, textAlign: "center", fontSize: 18, fontWeight: 700,
+                                  color: s.gold, backgroundColor: "transparent", border: "none",
+                                  outline: "none", fontFamily: "'Inter', sans-serif",
+                                  borderBottom: `1px solid ${s.border}`, padding: "2px 0",
+                                  appearance: "textfield",
+                                }}
+                              />
                               <button onClick={() => setFlavorQty(f, qty + 1)}
-                                style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.gold}`, background: "none", color: s.gold, fontSize: 20 }}>
+                                style={{ ...btnBase, width: 40, height: 40, borderRadius: "50%", border: `1px solid ${s.gold}`, background: "none", color: s.gold, fontSize: 20, flexShrink: 0 }}>
                                 +
                               </button>
                             </div>
@@ -449,10 +476,8 @@ export default function CashierPage() {
                         <div><span style={{ color: s.muted }}>Клиент:</span> <strong>{isWalkIn ? (walkInName || "Физ. лицо") : selectedClient?.name}</strong></div>
                         <div><span style={{ color: s.muted }}>Количество:</span> <strong>{totalQuantity} шт</strong></div>
                         {size && <div><span style={{ color: s.muted }}>Размер:</span> <strong>{finalSize || size}</strong></div>}
-                        {(isWalkIn ? walkInAmount : selectedClient?.price_per_unit) && (
-                          <div><span style={{ color: s.muted }}>Сумма:</span> <strong style={{ color: s.gold }}>
-                            {isWalkIn ? walkInAmount : (selectedClient?.price_per_unit * totalQuantity).toLocaleString("ru-RU")} ₸
-                          </strong></div>
+                        {isWalkIn && walkInAmount && (
+                          <div><span style={{ color: s.muted }}>Сумма:</span> <strong style={{ color: s.gold }}>{walkInAmount} ₸</strong></div>
                         )}
                       </div>
                     </div>
@@ -586,11 +611,6 @@ export default function CashierPage() {
                         {o.cake_flavor || "—"} · {o.quantity || "—"} шт
                         {o.notes && <span style={{ marginLeft: 8, color: s.muted }}>{o.notes}</span>}
                       </div>
-                      {o.total_amount && (
-                        <div style={{ color: s.gold, fontSize: 13, fontWeight: 600, marginTop: 4 }}>
-                          {Number(o.total_amount).toLocaleString("ru-RU")} ₸
-                        </div>
-                      )}
                       {o.status === "cancellation_requested" && (
                         <div style={{ color: "#ff9800", fontSize: 12, marginTop: 6 }}>Ожидает подтверждения: «{o.cancellation_reason}»</div>
                       )}

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { calcFlavorBalance } from "@/lib/flavorStock";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -49,6 +50,7 @@ export default function ProductionPage() {
   const [todayLog, setTodayLog] = useState<any[]>([]);
   const [loadingLog, setLoadingLog] = useState(true);
   const [dbFlavors, setDbFlavors] = useState<string[]>([]);
+  const [flavorBalance, setFlavorBalance] = useState<Record<string, number>>({});
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,6 +67,7 @@ export default function ProductionPage() {
     setUser(JSON.parse(auth));
     fetchFlavors();
     fetchTodayLog();
+    fetchFlavorBalance();
   }, []);
 
   useEffect(() => {
@@ -91,6 +94,14 @@ export default function ProductionPage() {
     setLoadingLog(false);
   };
 
+  const fetchFlavorBalance = async () => {
+    const [ordersRes, productionRes] = await Promise.all([
+      supabase.from("berrycake_orders").select("cake_flavor,quantity,status").neq("status", "cancelled"),
+      supabase.from("berrycake_production").select("flavor,quantity,defects"),
+    ]);
+    if (ordersRes.data && productionRes.data) setFlavorBalance(calcFlavorBalance(productionRes.data, ordersRes.data));
+  };
+
   const save = async () => {
     const qtyNum = parseInt(qty);
     const defNum = parseInt(defects) || 0;
@@ -112,6 +123,7 @@ export default function ProductionPage() {
     setSaving(false);
     setSaved(true);
     fetchTodayLog();
+    fetchFlavorBalance();
     setTimeout(() => {
       setSaved(false);
       setStep(1);
@@ -141,6 +153,7 @@ export default function ProductionPage() {
     setEditingId(null);
     setEditSaving(false);
     fetchTodayLog();
+    fetchFlavorBalance();
   };
 
   const todayTotal = todayLog.reduce((s, r) => s + (r.quantity || 0), 0);
@@ -239,6 +252,7 @@ export default function ProductionPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     {dbFlavors.map((f) => {
                       const color = FLAVOR_COLORS[f] || s.gold;
+                      const balance = Math.round(flavorBalance[f] ?? 0);
                       return (
                         <button key={f} onClick={() => { setFlavor(f); setStep(2); }}
                           style={{ ...btnBase, flexDirection: "column", backgroundColor: s.card,
@@ -246,6 +260,9 @@ export default function ProductionPage() {
                             gap: 10 }}>
                           <div style={{ width: 28, height: 28, borderRadius: "50%", backgroundColor: color, opacity: 0.8 }} />
                           <div style={{ color, fontWeight: 700, fontSize: 13, letterSpacing: 0.5 }}>{f}</div>
+                          <div style={{ color: balance <= 0 ? "#e57373" : s.muted, fontSize: 11, fontWeight: 600 }}>
+                            Остаток: {balance}
+                          </div>
                         </button>
                       );
                     })}
