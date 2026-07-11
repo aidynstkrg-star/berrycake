@@ -1,5 +1,6 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 const s = { bg: "#FAF6F1", card: "#ffffff", gold: "#8C1B3B", text: "#3E2723", muted: "#9E8070", border: "#E2CEB8" };
@@ -22,6 +23,17 @@ const GOALS = [
 type Goal = (typeof GOALS)[number]["key"];
 type FormatKey = "post" | "story";
 type Template = "standard" | "bento";
+type BlockId = "eyebrow" | "headline" | "secondary" | "bullets" | "caption" | "trustLine" | "cta";
+
+const BLOCK_LABELS: Record<BlockId, string> = {
+  eyebrow: "Метка",
+  headline: "Заголовок",
+  secondary: "Подзаголовок",
+  bullets: "Список",
+  caption: "Подпись",
+  trustLine: "Строка бренда",
+  cta: "Кнопка связи",
+};
 
 const FORMATS: Record<FormatKey, { w: number; h: number; label: string }> = {
   post: { w: 1080, h: 1350, label: "Пост 4:5" },
@@ -59,6 +71,28 @@ const BENTO_PRESET = {
   caption: "Мини-торт ручной работы · на любой повод",
 };
 
+type LayoutMap = Record<BlockId, { x: number; y: number; fontSize: number }>;
+
+function computeDefaultLayout(dims: { w: number; h: number }, isBento: boolean, goalKey: Goal): LayoutMap {
+  const h = dims.h;
+  const contentTop = 64 + 46 + 28 + 13 + 20; // wordmark block + gap + eyebrow row
+  const bottomReserve = 56 + 96; // bottom padding + scalloped edge
+  const remaining = h - contentTop - bottomReserve;
+  const headlineSize = isBento ? 64 : goalKey === "vacancy" ? 78 : 68;
+  const headlineY = contentTop + remaining * 0.5;
+  const secondarySize = isBento ? 26 : goalKey === "vacancy" ? 34 : 21;
+  const secondaryY = headlineY + headlineSize * 1.05 + 18;
+  return {
+    eyebrow: { x: 64, y: 118, fontSize: 13 },
+    headline: { x: 64, y: headlineY, fontSize: headlineSize },
+    secondary: { x: 64, y: secondaryY, fontSize: secondarySize },
+    bullets: { x: 64, y: secondaryY + secondarySize * 1.4 + 34, fontSize: 19 },
+    caption: { x: 64, y: secondaryY + secondarySize * 1.4 + 14, fontSize: 17 },
+    trustLine: { x: 64, y: h - 190, fontSize: 15 },
+    cta: { x: 64, y: h - 150, fontSize: 20 },
+  };
+}
+
 export default function MarketingGeneratorPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -68,8 +102,10 @@ export default function MarketingGeneratorPage() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [showCta, setShowCta] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [selected, setSelected] = useState<BlockId | null>(null);
 
   const [fields, setFields] = useState<any>({ ...PRESETS.vacancy, caption: "", contact: "+7 777 773 32 34" });
+  const [layout, setLayout] = useState<LayoutMap>(() => computeDefaultLayout(FORMATS.post, false, "vacancy"));
 
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -79,23 +115,41 @@ export default function MarketingGeneratorPage() {
     setUser(JSON.parse(auth));
   }, []);
 
+  const dims = FORMATS[format];
+
+  const resetLayout = (dimsArg = dims, isBentoArg = goal === "post" && template === "bento", goalArg = goal) =>
+    setLayout(computeDefaultLayout(dimsArg, isBentoArg, goalArg));
+
   const applyGoal = (g: Goal) => {
     setGoal(g);
     setTemplate("standard");
     setPhoto(null);
+    setSelected(null);
     setFields((f: any) => ({ ...f, ...PRESETS[g] }));
+    resetLayout(dims, false, g);
   };
 
   const applyTemplate = (t: Template) => {
     setTemplate(t);
+    setSelected(null);
     if (t === "bento") {
       setFields((f: any) => ({ ...f, ...BENTO_PRESET }));
+      resetLayout(dims, true, goal);
     } else {
       setFields((f: any) => ({ ...f, ...PRESETS[goal] }));
+      resetLayout(dims, false, goal);
     }
   };
 
+  const changeFormat = (f: FormatKey) => {
+    setFormat(f);
+    setSelected(null);
+    resetLayout(FORMATS[f], goal === "post" && template === "bento", goal);
+  };
+
   const setField = (key: string, val: string) => setFields((f: any) => ({ ...f, [key]: val }));
+  const setBlockFontSize = (id: BlockId, size: number) =>
+    setLayout((prev) => ({ ...prev, [id]: { ...prev[id], fontSize: size } }));
 
   const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -104,6 +158,40 @@ export default function MarketingGeneratorPage() {
     reader.onload = () => setPhoto(reader.result as string);
     reader.readAsDataURL(file);
   };
+
+  // On-screen preview is shown at a fixed display width, scaled down from the true canvas size.
+  const displayW = 300;
+  const scale = displayW / dims.w;
+  const displayH = dims.h * scale;
+
+  const startDrag = (id: BlockId, e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setSelected(id);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origin = layout[id];
+    const onMove = (ev: PointerEvent) => {
+      const dx = (ev.clientX - startX) / scale;
+      const dy = (ev.clientY - startY) / scale;
+      setLayout((prev) => ({ ...prev, [id]: { ...prev[id], x: origin.x + dx, y: origin.y + dy } }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const blockStyle = (id: BlockId): React.CSSProperties => ({
+    position: "absolute",
+    left: layout[id].x,
+    top: layout[id].y,
+    cursor: "grab",
+    outline: selected === id ? `2px dashed ${BERRY}` : "2px dashed transparent",
+    outlineOffset: 6,
+  });
 
   // html-to-image's own createImage() sets img.crossOrigin="anonymous" and awaits
   // img.decode() before resolving, which hangs forever for same-document data: URIs
@@ -127,10 +215,10 @@ export default function MarketingGeneratorPage() {
 
   const download = async () => {
     if (!previewRef.current) return;
+    setSelected(null);
     setExporting(true);
     try {
       const { toSvg } = await import("html-to-image");
-      const dims = FORMATS[format];
       const svgUri = await toSvg(previewRef.current, {
         width: dims.w, height: dims.h, style: { transform: "none" }, skipFonts: true,
       });
@@ -146,15 +234,9 @@ export default function MarketingGeneratorPage() {
 
   if (!user) return null;
 
-  const dims = FORMATS[format];
   const bullets: string[] = (fields.bullets || "").split("\n").map((b: string) => b.trim()).filter(Boolean);
   const isBento = goal === "post" && template === "bento";
   const hasPhoto = !!photo;
-
-  // On-screen preview is shown at a fixed display width, scaled down from the true canvas size.
-  const displayW = 300;
-  const scale = displayW / dims.w;
-  const displayH = dims.h * scale;
 
   const btnBase: React.CSSProperties = {
     border: "none", cursor: "pointer", fontFamily: sans, transition: "all 0.15s",
@@ -195,7 +277,7 @@ export default function MarketingGeneratorPage() {
             <div style={{ fontSize: 12, fontWeight: 600, color: s.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Формат</div>
             <div style={{ display: "flex", gap: 8 }}>
               {(Object.keys(FORMATS) as FormatKey[]).map((f) => (
-                <button key={f} onClick={() => setFormat(f)}
+                <button key={f} onClick={() => changeFormat(f)}
                   style={{ ...btnBase, flex: 1, padding: "9px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600,
                     backgroundColor: format === f ? s.gold : s.card,
                     color: format === f ? "#fff" : s.text,
@@ -304,6 +386,36 @@ export default function MarketingGeneratorPage() {
             </>
           )}
 
+          {/* Position/size editor for the selected block */}
+          <div style={{ marginBottom: 18, backgroundColor: selected ? "#f0fdf4" : s.card, border: `1.5px solid ${selected ? SAGE : s.border}`, borderRadius: 10, padding: "14px 16px" }}>
+            {selected ? (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: s.text, marginBottom: 10 }}>
+                  Блок: {BLOCK_LABELS[selected]} <span style={{ color: s.muted, fontWeight: 400 }}>(перетащите в превью)</span>
+                </div>
+                <label style={{ fontSize: 12, color: s.muted, display: "block", marginBottom: 4 }}>
+                  Размер шрифта: {layout[selected].fontSize}px
+                </label>
+                <input type="range" min={10} max={100} value={layout[selected].fontSize}
+                  onChange={(e) => setBlockFontSize(selected, Number(e.target.value))}
+                  style={{ width: "100%" }} />
+                <button onClick={() => setSelected(null)}
+                  style={{ ...btnBase, marginTop: 10, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "5px 12px", fontSize: 12 }}>
+                  Готово
+                </button>
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: s.muted }}>
+                Кликните на текст в превью справа, чтобы перетащить его или изменить размер шрифта.
+              </div>
+            )}
+          </div>
+
+          <button onClick={() => resetLayout()}
+            style={{ ...btnBase, width: "100%", marginBottom: 10, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 10, padding: "10px", fontSize: 13 }}>
+            ↺ Сбросить расположение
+          </button>
+
           <button onClick={download} disabled={exporting}
             style={{ ...btnBase, width: "100%", backgroundColor: exporting ? s.border : "#4caf50", borderRadius: 10, padding: "13px", color: exporting ? s.muted : "#fff", fontWeight: 700, fontSize: 15 }}>
             {exporting ? "Экспорт..." : `↓ Скачать PNG (${dims.w}×${dims.h})`}
@@ -314,13 +426,12 @@ export default function MarketingGeneratorPage() {
         <div className="mkt-preview-col" style={{ position: "sticky", top: 24 }}>
           <div style={{ width: displayW, height: displayH, overflow: "hidden", borderRadius: 8, boxShadow: "0 8px 30px rgba(62,39,35,0.18)" }}>
             <div style={{ width: displayW, height: displayH, position: "relative" }}>
-              <div ref={previewRef}
+              <div ref={previewRef} onPointerDown={() => setSelected(null)}
                 style={{
                   width: dims.w, height: dims.h,
                   transform: `scale(${scale})`, transformOrigin: "top left",
                   position: "relative", overflow: "hidden",
                   backgroundColor: MILK, fontFamily: sans,
-                  display: "flex", flexDirection: "column",
                 }}>
 
                 {/* Background photo (bento or optional standard-post photo) */}
@@ -351,89 +462,96 @@ export default function MarketingGeneratorPage() {
                   </div>
                 )}
 
-                {/* Content column */}
-                <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", padding: "64px 64px 56px" }}>
-                  {/* Wordmark */}
-                  <div>
-                    <div style={{ fontFamily: serif, fontSize: 30 }}>
-                      <span style={{ color: BERRY }}>Berry</span><span style={{ color: BERRY, fontWeight: 600 }}>Cake</span>
-                    </div>
-                    <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 3, color: hasPhoto ? MILK : CARAMEL, marginTop: 4 }}>
-                      ТОРТЫ РУЧНОЙ РАБОТЫ · АЛМАТЫ
-                    </div>
+                {/* Wordmark — fixed brand anchor, not draggable */}
+                <div style={{ position: "absolute", left: 64, top: 64 }}>
+                  <div style={{ fontFamily: serif, fontSize: 30 }}>
+                    <span style={{ color: BERRY }}>Berry</span><span style={{ color: BERRY, fontWeight: 600 }}>Cake</span>
                   </div>
+                  <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, letterSpacing: 3, color: hasPhoto ? MILK : CARAMEL, marginTop: 4 }}>
+                    ТОРТЫ РУЧНОЙ РАБОТЫ · АЛМАТЫ
+                  </div>
+                </div>
 
-                  {/* Eyebrow */}
-                  <div style={{ fontFamily: sans, fontSize: 13, fontWeight: 600, letterSpacing: 3, color: hasPhoto ? "#F2E0C8" : CARAMEL, marginTop: 28 }}>
+                {/* Eyebrow */}
+                <div onPointerDown={(e) => startDrag("eyebrow", e)} style={blockStyle("eyebrow")}>
+                  <div style={{ fontFamily: sans, fontSize: layout.eyebrow.fontSize, fontWeight: 600, letterSpacing: 3, color: hasPhoto ? "#F2E0C8" : CARAMEL, whiteSpace: "nowrap" }}>
                     {(fields.eyebrow || "").toUpperCase()}
                   </div>
+                </div>
 
-                  {/* Spacer pushes headline block toward the lower two-thirds */}
-                  <div style={{ flex: hasPhoto ? 1 : 0.55 }} />
-
-                  {/* Headline / price pill for bento */}
+                {/* Headline / price pill for bento */}
+                <div onPointerDown={(e) => startDrag("headline", e)} style={blockStyle("headline")}>
                   {isBento ? (
-                    <>
-                      <div style={{ fontFamily: serif, fontSize: 64, color: hasPhoto ? MILK : COCOA, lineHeight: 1.05, fontWeight: 600 }}>
-                        {fields.headline}
-                      </div>
-                      <div style={{ display: "inline-block", marginTop: 14, backgroundColor: BERRY, color: MILK, fontFamily: serif, fontSize: 26, fontWeight: 600, padding: "8px 22px", borderRadius: 40, whiteSpace: "nowrap" }}>
-                        {fields.secondary}
-                      </div>
-                      {fields.caption && (
-                        <div style={{ fontFamily: sans, fontSize: 17, color: hasPhoto ? "#F2E0C8" : s.muted, marginTop: 14, maxWidth: dims.w - 260 }}>
-                          {fields.caption}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ fontFamily: serif, fontSize: goal === "vacancy" ? 78 : 68, fontWeight: 600, color: hasPhoto ? MILK : COCOA, lineHeight: 1.05 }}>
-                        {fields.headline}
-                      </div>
-                      {fields.secondary && (
-                        <div style={{
-                          fontFamily: goal === "vacancy" ? serif : sans,
-                          fontStyle: goal === "vacancy" ? "italic" : "normal",
-                          fontSize: goal === "vacancy" ? 34 : 21,
-                          color: hasPhoto ? "#F2E0C8" : (goal === "vacancy" ? BERRY : COCOA),
-                          marginTop: 14, maxWidth: dims.w - 260, whiteSpace: "pre-wrap",
-                        }}>
-                          {fields.secondary}
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* Bullets (vacancy / ad only) */}
-                  {bullets.length > 0 && (
-                    <div style={{ marginTop: 30, display: "flex", flexDirection: "column", gap: 16 }}>
-                      {bullets.map((b, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                          <div style={{ width: 20, height: 20, borderRadius: "50%", backgroundColor: SAGE, flexShrink: 0, marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <span style={{ color: MILK, fontSize: 12, fontWeight: 700, lineHeight: 1 }}>✓</span>
-                          </div>
-                          <div style={{ fontFamily: sans, fontSize: 19, fontWeight: 500, color: hasPhoto ? MILK : COCOA, whiteSpace: "nowrap" }}>{b}</div>
-                        </div>
-                      ))}
+                    <div style={{ fontFamily: serif, fontSize: layout.headline.fontSize, color: hasPhoto ? MILK : COCOA, lineHeight: 1.05, fontWeight: 600, whiteSpace: "nowrap" }}>
+                      {fields.headline}
                     </div>
-                  )}
-
-                  <div style={{ flex: 1 }} />
-
-                  {/* Trust line */}
-                  <div style={{ fontFamily: sans, fontSize: 15, color: hasPhoto ? "#F2E0C8cc" : s.muted, marginBottom: showCta ? 20 : 0 }}>
-                    BerryCake · торты ручной работы · Алматы
-                  </div>
-
-                  {/* CTA */}
-                  {showCta && (
-                    <div style={{ backgroundColor: BERRY, borderRadius: 16, padding: "20px 26px", display: "inline-block" }}>
-                      <div style={{ fontFamily: sans, fontWeight: 600, fontSize: 20, color: MILK, whiteSpace: "nowrap" }}>{fields.ctaLabel}</div>
-                      <div style={{ fontFamily: sans, fontWeight: 600, fontSize: 18, color: MILK, marginTop: 6, whiteSpace: "nowrap" }}>{fields.contact}</div>
+                  ) : (
+                    <div style={{ fontFamily: serif, fontSize: layout.headline.fontSize, fontWeight: 600, color: hasPhoto ? MILK : COCOA, lineHeight: 1.05, maxWidth: dims.w - 128 }}>
+                      {fields.headline}
                     </div>
                   )}
                 </div>
+
+                {fields.secondary && (
+                  <div onPointerDown={(e) => startDrag("secondary", e)} style={blockStyle("secondary")}>
+                    {isBento ? (
+                      <div style={{ display: "inline-block", backgroundColor: BERRY, color: MILK, fontFamily: serif, fontSize: layout.secondary.fontSize, fontWeight: 600, padding: "8px 22px", borderRadius: 40, whiteSpace: "nowrap" }}>
+                        {fields.secondary}
+                      </div>
+                    ) : (
+                      <div style={{
+                        fontFamily: goal === "vacancy" ? serif : sans,
+                        fontStyle: goal === "vacancy" ? "italic" : "normal",
+                        fontSize: layout.secondary.fontSize,
+                        color: hasPhoto ? "#F2E0C8" : (goal === "vacancy" ? BERRY : COCOA),
+                        maxWidth: dims.w - 128, whiteSpace: "pre-wrap",
+                      }}>
+                        {fields.secondary}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {isBento && fields.caption && (
+                  <div onPointerDown={(e) => startDrag("caption", e)} style={blockStyle("caption")}>
+                    <div style={{ fontFamily: sans, fontSize: layout.caption.fontSize, color: hasPhoto ? "#F2E0C8" : s.muted, maxWidth: dims.w - 260 }}>
+                      {fields.caption}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bullets (vacancy / ad only) */}
+                {bullets.length > 0 && (
+                  <div onPointerDown={(e) => startDrag("bullets", e)} style={blockStyle("bullets")}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                      {bullets.map((b, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                          <div style={{ width: layout.bullets.fontSize + 1, height: layout.bullets.fontSize + 1, borderRadius: "50%", backgroundColor: SAGE, flexShrink: 0, marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ color: MILK, fontSize: layout.bullets.fontSize * 0.6, fontWeight: 700, lineHeight: 1 }}>✓</span>
+                          </div>
+                          <div style={{ fontFamily: sans, fontSize: layout.bullets.fontSize, fontWeight: 500, color: hasPhoto ? MILK : COCOA, whiteSpace: "nowrap" }}>{b}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Trust line */}
+                <div onPointerDown={(e) => startDrag("trustLine", e)} style={blockStyle("trustLine")}>
+                  <div style={{ fontFamily: sans, fontSize: layout.trustLine.fontSize, color: hasPhoto ? "#F2E0C8cc" : s.muted, whiteSpace: "nowrap" }}>
+                    BerryCake · торты ручной работы · Алматы
+                  </div>
+                </div>
+
+                {/* CTA */}
+                {showCta && (
+                  <div onPointerDown={(e) => startDrag("cta", e)} style={blockStyle("cta")}>
+                    <div style={{ backgroundColor: BERRY, borderRadius: 16, padding: "20px 26px", display: "inline-block" }}>
+                      <div style={{ fontFamily: sans, fontWeight: 600, fontSize: layout.cta.fontSize, color: MILK, whiteSpace: "nowrap" }}>{fields.ctaLabel}</div>
+                      <div style={{ fontFamily: sans, fontWeight: 600, fontSize: layout.cta.fontSize - 2, color: MILK, marginTop: 6, whiteSpace: "nowrap" }}>{fields.contact}</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
