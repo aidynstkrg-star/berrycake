@@ -815,6 +815,13 @@ export default function Dashboard() {
             </svg>
             {!isMobile && "Брендбук"}
           </a>
+          <a href="/marketing" target="_blank" rel="noopener noreferrer"
+            style={{ background: `${s.gold}12`, border: `1.5px solid ${s.gold}`, color: s.gold, padding: isMobile ? "0 10px" : "0 16px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, minHeight: 44, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" as const, textDecoration: "none" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+            </svg>
+            {!isMobile && "Генератор"}
+          </a>
           <button onClick={() => { localStorage.removeItem("bc_auth"); router.replace("/login"); }}
             style={{ background: "none", border: `1px solid ${s.border}`, color: s.muted, padding: isMobile ? "0 12px" : "6px 14px", borderRadius: 8, cursor: "pointer", fontSize: isMobile ? 13 : 13, minHeight: 44, display: "flex", alignItems: "center" }}>
             Выйти
