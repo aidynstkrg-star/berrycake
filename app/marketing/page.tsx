@@ -1,6 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
-import { useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 const s = { bg: "#FAF6F1", card: "#ffffff", gold: "#8C1B3B", text: "#3E2723", muted: "#9E8070", border: "#E2CEB8" };
@@ -14,6 +13,15 @@ const CREAM = "#F2E0C8";
 const COCOA = "#3E2723";
 const MILK = "#FAF6F1";
 
+const SWATCHES: { label: string; value: string | null }[] = [
+  { label: "Авто", value: null },
+  { label: "Berry", value: BERRY },
+  { label: "Caramel", value: CARAMEL },
+  { label: "Sage", value: SAGE },
+  { label: "Cocoa", value: COCOA },
+  { label: "Milk", value: MILK },
+];
+
 const GOALS = [
   { key: "vacancy", label: "Вакансия" },
   { key: "ad", label: "Таргет / Реклама" },
@@ -24,6 +32,7 @@ type Goal = (typeof GOALS)[number]["key"];
 type FormatKey = "post" | "story";
 type Template = "standard" | "bento";
 type BlockId = "eyebrow" | "headline" | "secondary" | "bullets" | "caption" | "trustLine" | "cta";
+type Align = "left" | "center";
 
 const BLOCK_LABELS: Record<BlockId, string> = {
   eyebrow: "Метка",
@@ -34,6 +43,7 @@ const BLOCK_LABELS: Record<BlockId, string> = {
   trustLine: "Строка бренда",
   cta: "Кнопка связи",
 };
+const ALIGNABLE: BlockId[] = ["eyebrow", "headline", "secondary", "caption", "trustLine"];
 
 const FORMATS: Record<FormatKey, { w: number; h: number; label: string }> = {
   post: { w: 1080, h: 1350, label: "Пост 4:5" },
@@ -71,27 +81,33 @@ const BENTO_PRESET = {
   caption: "Мини-торт ручной работы · на любой повод",
 };
 
-type LayoutMap = Record<BlockId, { x: number; y: number; fontSize: number }>;
+type BlockLayout = { x: number; y: number; fontSize: number; align: Align; color: string | null; visible: boolean };
+type LayoutMap = Record<BlockId, BlockLayout>;
+
+const blk = (x: number, y: number, fontSize: number): BlockLayout => ({ x, y, fontSize, align: "left", color: null, visible: true });
 
 function computeDefaultLayout(dims: { w: number; h: number }, isBento: boolean, goalKey: Goal): LayoutMap {
   const h = dims.h;
-  const contentTop = 64 + 46 + 28 + 13 + 20; // wordmark block + gap + eyebrow row
-  const bottomReserve = 56 + 96; // bottom padding + scalloped edge
+  const contentTop = 64 + 46 + 28 + 13 + 20;
+  const bottomReserve = 56 + 96;
   const remaining = h - contentTop - bottomReserve;
   const headlineSize = isBento ? 64 : goalKey === "vacancy" ? 78 : 68;
   const headlineY = contentTop + remaining * 0.5;
   const secondarySize = isBento ? 26 : goalKey === "vacancy" ? 34 : 21;
   const secondaryY = headlineY + headlineSize * 1.05 + 18;
   return {
-    eyebrow: { x: 64, y: 118, fontSize: 13 },
-    headline: { x: 64, y: headlineY, fontSize: headlineSize },
-    secondary: { x: 64, y: secondaryY, fontSize: secondarySize },
-    bullets: { x: 64, y: secondaryY + secondarySize * 1.4 + 34, fontSize: 19 },
-    caption: { x: 64, y: secondaryY + secondarySize * 1.4 + 14, fontSize: 17 },
-    trustLine: { x: 64, y: h - 190, fontSize: 15 },
-    cta: { x: 64, y: h - 150, fontSize: 20 },
+    eyebrow: blk(64, 118, 13),
+    headline: blk(64, headlineY, headlineSize),
+    secondary: blk(64, secondaryY, secondarySize),
+    bullets: blk(64, secondaryY + secondarySize * 1.4 + 34, 19),
+    caption: blk(64, secondaryY + secondarySize * 1.4 + 14, 17),
+    trustLine: blk(64, h - 190, 15),
+    cta: blk(64, h - 150, 20),
   };
 }
+
+type SavedTemplate = { name: string; goal: Goal; format: FormatKey; template: Template; fields: any; layout: LayoutMap };
+const TEMPLATES_KEY = "bc_marketing_templates";
 
 export default function MarketingGeneratorPage() {
   const router = useRouter();
@@ -100,9 +116,11 @@ export default function MarketingGeneratorPage() {
   const [format, setFormat] = useState<FormatKey>("post");
   const [template, setTemplate] = useState<Template>("standard");
   const [photo, setPhoto] = useState<string | null>(null);
-  const [showCta, setShowCta] = useState(true);
+  const [photoTransform, setPhotoTransform] = useState({ x: 0, y: 0, zoom: 1 });
   const [exporting, setExporting] = useState(false);
   const [selected, setSelected] = useState<BlockId | null>(null);
+  const [snapGuide, setSnapGuide] = useState<"margin" | "center" | null>(null);
+  const [savedTemplates, setSavedTemplates] = useState<SavedTemplate[]>([]);
 
   const [fields, setFields] = useState<any>({ ...PRESETS.vacancy, caption: "", contact: "+7 777 773 32 34" });
   const [layout, setLayout] = useState<LayoutMap>(() => computeDefaultLayout(FORMATS.post, false, "vacancy"));
@@ -113,12 +131,18 @@ export default function MarketingGeneratorPage() {
     const auth = localStorage.getItem("bc_auth");
     if (!auth) { router.replace("/login"); return; }
     setUser(JSON.parse(auth));
+    try {
+      const saved = localStorage.getItem(TEMPLATES_KEY);
+      if (saved) setSavedTemplates(JSON.parse(saved));
+    } catch {}
   }, []);
 
   const dims = FORMATS[format];
 
-  const resetLayout = (dimsArg = dims, isBentoArg = goal === "post" && template === "bento", goalArg = goal) =>
+  const resetLayout = (dimsArg = dims, isBentoArg = goal === "post" && template === "bento", goalArg = goal) => {
     setLayout(computeDefaultLayout(dimsArg, isBentoArg, goalArg));
+    setPhotoTransform({ x: 0, y: 0, zoom: 1 });
+  };
 
   const applyGoal = (g: Goal) => {
     setGoal(g);
@@ -148,21 +172,49 @@ export default function MarketingGeneratorPage() {
   };
 
   const setField = (key: string, val: string) => setFields((f: any) => ({ ...f, [key]: val }));
-  const setBlockFontSize = (id: BlockId, size: number) =>
-    setLayout((prev) => ({ ...prev, [id]: { ...prev[id], fontSize: size } }));
+  const patchBlock = (id: BlockId, patch: Partial<BlockLayout>) =>
+    setLayout((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
   const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setPhoto(reader.result as string);
+    reader.onload = () => { setPhoto(reader.result as string); setPhotoTransform({ x: 0, y: 0, zoom: 1 }); };
     reader.readAsDataURL(file);
+  };
+
+  const saveTemplate = () => {
+    const name = window.prompt("Название шаблона:");
+    if (!name) return;
+    const entry: SavedTemplate = { name, goal, format, template, fields, layout };
+    const next = [...savedTemplates.filter((t) => t.name !== name), entry];
+    setSavedTemplates(next);
+    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(next));
+  };
+
+  const loadTemplate = (t: SavedTemplate) => {
+    setGoal(t.goal);
+    setFormat(t.format);
+    setTemplate(t.template);
+    setFields(t.fields);
+    setLayout(t.layout);
+    setPhoto(null);
+    setPhotoTransform({ x: 0, y: 0, zoom: 1 });
+    setSelected(null);
+  };
+
+  const deleteTemplate = (name: string) => {
+    const next = savedTemplates.filter((t) => t.name !== name);
+    setSavedTemplates(next);
+    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(next));
   };
 
   // On-screen preview is shown at a fixed display width, scaled down from the true canvas size.
   const displayW = 300;
   const scale = displayW / dims.w;
   const displayH = dims.h * scale;
+
+  const SNAP_THRESHOLD = 10;
 
   const startDrag = (id: BlockId, e: React.PointerEvent) => {
     e.stopPropagation();
@@ -171,10 +223,37 @@ export default function MarketingGeneratorPage() {
     const startX = e.clientX;
     const startY = e.clientY;
     const origin = layout[id];
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const blockWidthCanvas = rect.width / scale;
+    const centerSnapX = (dims.w - blockWidthCanvas) / 2;
     const onMove = (ev: PointerEvent) => {
       const dx = (ev.clientX - startX) / scale;
       const dy = (ev.clientY - startY) / scale;
-      setLayout((prev) => ({ ...prev, [id]: { ...prev[id], x: origin.x + dx, y: origin.y + dy } }));
+      let nx = origin.x + dx;
+      const ny = origin.y + dy;
+      if (Math.abs(nx - 64) < SNAP_THRESHOLD) { nx = 64; setSnapGuide("margin"); }
+      else if (Math.abs(nx - centerSnapX) < SNAP_THRESHOLD) { nx = centerSnapX; setSnapGuide("center"); }
+      else setSnapGuide(null);
+      patchBlock(id, { x: nx, y: ny });
+    };
+    const onUp = () => {
+      setSnapGuide(null);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const startPhotoDrag = (e: React.PointerEvent) => {
+    setSelected(null);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origin = photoTransform;
+    const onMove = (ev: PointerEvent) => {
+      const dx = (ev.clientX - startX) / scale;
+      const dy = (ev.clientY - startY) / scale;
+      setPhotoTransform((p) => ({ ...p, x: origin.x + dx, y: origin.y + dy }));
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
@@ -237,11 +316,23 @@ export default function MarketingGeneratorPage() {
   const bullets: string[] = (fields.bullets || "").split("\n").map((b: string) => b.trim()).filter(Boolean);
   const isBento = goal === "post" && template === "bento";
   const hasPhoto = !!photo;
+  const showCta = layout.cta.visible;
+
+  const applicableBlocks: BlockId[] = [
+    "eyebrow", "headline",
+    ...(fields.secondary ? (["secondary"] as BlockId[]) : []),
+    ...(isBento && fields.caption ? (["caption"] as BlockId[]) : []),
+    ...(bullets.length > 0 ? (["bullets"] as BlockId[]) : []),
+    "trustLine", "cta",
+  ];
 
   const btnBase: React.CSSProperties = {
     border: "none", cursor: "pointer", fontFamily: sans, transition: "all 0.15s",
     display: "inline-flex", alignItems: "center", justifyContent: "center",
   };
+
+  const autoColor = (light: string, dark: string) => (hasPhoto ? light : dark);
+  const colorOf = (id: BlockId, light: string, dark: string) => layout[id].color || autoColor(light, dark);
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: s.bg, color: s.text, fontFamily: sans }}>
@@ -313,10 +404,20 @@ export default function MarketingGeneratorPage() {
               <input type="file" accept="image/*" onChange={onPhotoChange}
                 style={{ width: "100%", fontSize: 13, color: s.text }} />
               {photo && (
-                <button onClick={() => setPhoto(null)}
-                  style={{ ...btnBase, marginTop: 6, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "4px 10px", fontSize: 12 }}>
-                  Убрать фото
-                </button>
+                <>
+                  <button onClick={() => setPhoto(null)}
+                    style={{ ...btnBase, marginTop: 6, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "4px 10px", fontSize: 12 }}>
+                    Убрать фото
+                  </button>
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ fontSize: 12, color: s.muted, display: "block", marginBottom: 4 }}>
+                      Масштаб фото: {photoTransform.zoom.toFixed(2)}× <span style={{ color: s.muted }}>(перетащите фото в превью, чтобы кадрировать)</span>
+                    </label>
+                    <input type="range" min={1} max={2.5} step={0.05} value={photoTransform.zoom}
+                      onChange={(e) => setPhotoTransform((p) => ({ ...p, zoom: Number(e.target.value) }))}
+                      style={{ width: "100%" }} />
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -366,27 +467,31 @@ export default function MarketingGeneratorPage() {
             </div>
           )}
 
-          <div style={{ marginBottom: 18, display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="checkbox" checked={showCta} onChange={(e) => setShowCta(e.target.checked)} id="showCta" />
-            <label htmlFor="showCta" style={{ fontSize: 13, color: s.text, cursor: "pointer" }}>Показывать кнопку связи</label>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: s.muted, display: "block", marginBottom: 6 }}>Текст кнопки</label>
+            <input value={fields.ctaLabel} onChange={(e) => setField("ctaLabel", e.target.value)}
+              style={{ width: "100%", backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: s.muted, display: "block", marginBottom: 6 }}>Контакт</label>
+            <input value={fields.contact} onChange={(e) => setField("contact", e.target.value)}
+              style={{ width: "100%", backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
           </div>
 
-          {showCta && (
-            <>
-              <div style={{ marginBottom: 18 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: s.muted, display: "block", marginBottom: 6 }}>Текст кнопки</label>
-                <input value={fields.ctaLabel} onChange={(e) => setField("ctaLabel", e.target.value)}
-                  style={{ width: "100%", backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
-              </div>
-              <div style={{ marginBottom: 18 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: s.muted, display: "block", marginBottom: 6 }}>Контакт</label>
-                <input value={fields.contact} onChange={(e) => setField("contact", e.target.value)}
-                  style={{ width: "100%", backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "9px 12px", color: s.text, fontSize: 14, outline: "none", boxSizing: "border-box" }} />
-              </div>
-            </>
-          )}
+          {/* Per-block visibility checklist */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: s.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Видимость блоков</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {applicableBlocks.map((id) => (
+                <label key={id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: s.text, cursor: "pointer" }}>
+                  <input type="checkbox" checked={layout[id].visible} onChange={(e) => patchBlock(id, { visible: e.target.checked })} />
+                  <span onClick={() => setSelected(id)} style={{ textDecoration: selected === id ? "underline" : "none" }}>{BLOCK_LABELS[id]}</span>
+                </label>
+              ))}
+            </div>
+          </div>
 
-          {/* Position/size editor for the selected block */}
+          {/* Position/size/align/color editor for the selected block */}
           <div style={{ marginBottom: 18, backgroundColor: selected ? "#f0fdf4" : s.card, border: `1.5px solid ${selected ? SAGE : s.border}`, borderRadius: 10, padding: "14px 16px" }}>
             {selected ? (
               <>
@@ -397,16 +502,53 @@ export default function MarketingGeneratorPage() {
                   Размер шрифта: {layout[selected].fontSize}px
                 </label>
                 <input type="range" min={10} max={100} value={layout[selected].fontSize}
-                  onChange={(e) => setBlockFontSize(selected, Number(e.target.value))}
-                  style={{ width: "100%" }} />
-                <button onClick={() => setSelected(null)}
-                  style={{ ...btnBase, marginTop: 10, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "5px 12px", fontSize: 12 }}>
-                  Готово
-                </button>
+                  onChange={(e) => patchBlock(selected, { fontSize: Number(e.target.value) })}
+                  style={{ width: "100%", marginBottom: 12 }} />
+
+                {ALIGNABLE.includes(selected) && (
+                  <>
+                    <label style={{ fontSize: 12, color: s.muted, display: "block", marginBottom: 4 }}>Выравнивание</label>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                      {([["left", "По левому"], ["center", "По центру"]] as const).map(([a, label]) => (
+                        <button key={a} onClick={() => patchBlock(selected, { align: a })}
+                          style={{ ...btnBase, flex: 1, padding: "7px 0", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                            backgroundColor: layout[selected].align === a ? s.gold : s.card,
+                            color: layout[selected].align === a ? "#fff" : s.text,
+                            border: `1px solid ${layout[selected].align === a ? s.gold : s.border}` }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <label style={{ fontSize: 12, color: s.muted, display: "block", marginBottom: 4 }}>Цвет</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                  {SWATCHES.map((sw) => (
+                    <button key={sw.label} onClick={() => patchBlock(selected, { color: sw.value })}
+                      title={sw.label}
+                      style={{ width: 28, height: 28, borderRadius: "50%",
+                        backgroundColor: sw.value || "#fff",
+                        backgroundImage: sw.value ? undefined : "conic-gradient(#ccc 0 90deg, #fff 0 180deg, #ccc 0 270deg, #fff 0)",
+                        border: layout[selected].color === sw.value ? `3px solid ${s.gold}` : `1px solid ${s.border}`,
+                        cursor: "pointer" }} />
+                  ))}
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => patchBlock(selected, { visible: false })}
+                    style={{ ...btnBase, flex: 1, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 0", fontSize: 12 }}>
+                    Скрыть блок
+                  </button>
+                  <button onClick={() => setSelected(null)}
+                    style={{ ...btnBase, flex: 1, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 0", fontSize: 12 }}>
+                    Готово
+                  </button>
+                </div>
               </>
             ) : (
               <div style={{ fontSize: 12, color: s.muted }}>
-                Кликните на текст в превью справа, чтобы перетащить его или изменить размер шрифта.
+                Кликните на текст в превью справа, чтобы перетащить его, изменить размер, выравнивание или цвет.
               </div>
             )}
           </div>
@@ -415,6 +557,32 @@ export default function MarketingGeneratorPage() {
             style={{ ...btnBase, width: "100%", marginBottom: 10, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 10, padding: "10px", fontSize: 13 }}>
             ↺ Сбросить расположение
           </button>
+
+          {/* Saved templates */}
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: s.muted, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Мои шаблоны</div>
+            <button onClick={saveTemplate}
+              style={{ ...btnBase, width: "100%", background: "none", border: `1.5px dashed ${s.border}`, color: s.gold, borderRadius: 10, padding: "9px", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+              + Сохранить текущий как шаблон
+            </button>
+            {savedTemplates.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {savedTemplates.map((t) => (
+                  <div key={t.name} style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "6px 10px" }}>
+                    <span style={{ flex: 1, fontSize: 13, color: s.text }}>{t.name}</span>
+                    <button onClick={() => loadTemplate(t)}
+                      style={{ ...btnBase, background: "none", border: `1px solid ${s.gold}`, color: s.gold, borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600 }}>
+                      Загрузить
+                    </button>
+                    <button onClick={() => deleteTemplate(t.name)}
+                      style={{ ...btnBase, background: "none", border: "1px solid #e5737455", color: "#e57373", borderRadius: 6, padding: "4px 8px", fontSize: 11 }}>
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button onClick={download} disabled={exporting}
             style={{ ...btnBase, width: "100%", backgroundColor: exporting ? s.border : "#4caf50", borderRadius: 10, padding: "13px", color: exporting ? s.muted : "#fff", fontWeight: 700, fontSize: 15 }}>
@@ -434,11 +602,17 @@ export default function MarketingGeneratorPage() {
                   backgroundColor: MILK, fontFamily: sans,
                 }}>
 
-                {/* Background photo (bento or optional standard-post photo) */}
+                {/* Background photo (bento or optional standard-post photo) — draggable to crop, zoom via slider */}
                 {hasPhoto && (
                   <>
-                    <img src={photo!} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(62,39,35,0.05) 0%, rgba(62,39,35,0.05) 45%, rgba(62,39,35,0.88) 100%)" }} />
+                    <div onPointerDown={startPhotoDrag} style={{ position: "absolute", inset: 0, overflow: "hidden", cursor: "grab" }}>
+                      <img src={photo!} alt="" style={{
+                        position: "absolute", top: "50%", left: "50%", minWidth: "100%", minHeight: "100%", width: "auto", height: "auto",
+                        transform: `translate(-50%, -50%) translate(${photoTransform.x}px, ${photoTransform.y}px) scale(${photoTransform.zoom})`,
+                        objectFit: "cover",
+                      }} />
+                    </div>
+                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(62,39,35,0.05) 0%, rgba(62,39,35,0.05) 45%, rgba(62,39,35,0.88) 100%)", pointerEvents: "none" }} />
                   </>
                 )}
 
@@ -462,6 +636,14 @@ export default function MarketingGeneratorPage() {
                   </div>
                 )}
 
+                {/* Snap guides */}
+                {snapGuide === "margin" && (
+                  <div style={{ position: "absolute", left: 64, top: 0, bottom: 0, width: 1, backgroundColor: SAGE, zIndex: 60 }} />
+                )}
+                {snapGuide === "center" && (
+                  <div style={{ position: "absolute", left: dims.w / 2, top: 0, bottom: 0, width: 1, backgroundColor: SAGE, zIndex: 60 }} />
+                )}
+
                 {/* Wordmark — fixed brand anchor, not draggable */}
                 <div style={{ position: "absolute", left: 64, top: 64 }}>
                   <div style={{ fontFamily: serif, fontSize: 30 }}>
@@ -473,29 +655,33 @@ export default function MarketingGeneratorPage() {
                 </div>
 
                 {/* Eyebrow */}
-                <div onPointerDown={(e) => startDrag("eyebrow", e)} style={blockStyle("eyebrow")}>
-                  <div style={{ fontFamily: sans, fontSize: layout.eyebrow.fontSize, fontWeight: 600, letterSpacing: 3, color: hasPhoto ? "#F2E0C8" : CARAMEL, whiteSpace: "nowrap" }}>
-                    {(fields.eyebrow || "").toUpperCase()}
+                {layout.eyebrow.visible && (
+                  <div onPointerDown={(e) => startDrag("eyebrow", e)} style={{ ...blockStyle("eyebrow"), width: dims.w - 128, textAlign: layout.eyebrow.align }}>
+                    <div style={{ fontFamily: sans, fontSize: layout.eyebrow.fontSize, fontWeight: 600, letterSpacing: 3, color: colorOf("eyebrow", "#F2E0C8", CARAMEL), whiteSpace: "nowrap" }}>
+                      {(fields.eyebrow || "").toUpperCase()}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Headline / price pill for bento */}
-                <div onPointerDown={(e) => startDrag("headline", e)} style={blockStyle("headline")}>
-                  {isBento ? (
-                    <div style={{ fontFamily: serif, fontSize: layout.headline.fontSize, color: hasPhoto ? MILK : COCOA, lineHeight: 1.05, fontWeight: 600, whiteSpace: "nowrap" }}>
-                      {fields.headline}
-                    </div>
-                  ) : (
-                    <div style={{ fontFamily: serif, fontSize: layout.headline.fontSize, fontWeight: 600, color: hasPhoto ? MILK : COCOA, lineHeight: 1.05, maxWidth: dims.w - 128 }}>
-                      {fields.headline}
-                    </div>
-                  )}
-                </div>
-
-                {fields.secondary && (
-                  <div onPointerDown={(e) => startDrag("secondary", e)} style={blockStyle("secondary")}>
+                {layout.headline.visible && (
+                  <div onPointerDown={(e) => startDrag("headline", e)} style={{ ...blockStyle("headline"), width: dims.w - 128, textAlign: layout.headline.align }}>
                     {isBento ? (
-                      <div style={{ display: "inline-block", backgroundColor: BERRY, color: MILK, fontFamily: serif, fontSize: layout.secondary.fontSize, fontWeight: 600, padding: "8px 22px", borderRadius: 40, whiteSpace: "nowrap" }}>
+                      <div style={{ fontFamily: serif, fontSize: layout.headline.fontSize, color: colorOf("headline", MILK, COCOA), lineHeight: 1.05, fontWeight: 600, whiteSpace: "nowrap" }}>
+                        {fields.headline}
+                      </div>
+                    ) : (
+                      <div style={{ fontFamily: serif, fontSize: layout.headline.fontSize, fontWeight: 600, color: colorOf("headline", MILK, COCOA), lineHeight: 1.05 }}>
+                        {fields.headline}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {fields.secondary && layout.secondary.visible && (
+                  <div onPointerDown={(e) => startDrag("secondary", e)} style={{ ...blockStyle("secondary"), width: dims.w - 128, textAlign: layout.secondary.align }}>
+                    {isBento ? (
+                      <div style={{ display: "inline-block", backgroundColor: layout.secondary.color || BERRY, color: MILK, fontFamily: serif, fontSize: layout.secondary.fontSize, fontWeight: 600, padding: "8px 22px", borderRadius: 40, whiteSpace: "nowrap" }}>
                         {fields.secondary}
                       </div>
                     ) : (
@@ -503,8 +689,8 @@ export default function MarketingGeneratorPage() {
                         fontFamily: goal === "vacancy" ? serif : sans,
                         fontStyle: goal === "vacancy" ? "italic" : "normal",
                         fontSize: layout.secondary.fontSize,
-                        color: hasPhoto ? "#F2E0C8" : (goal === "vacancy" ? BERRY : COCOA),
-                        maxWidth: dims.w - 128, whiteSpace: "pre-wrap",
+                        color: layout.secondary.color || autoColor("#F2E0C8", goal === "vacancy" ? BERRY : COCOA),
+                        whiteSpace: "pre-wrap",
                       }}>
                         {fields.secondary}
                       </div>
@@ -512,16 +698,16 @@ export default function MarketingGeneratorPage() {
                   </div>
                 )}
 
-                {isBento && fields.caption && (
-                  <div onPointerDown={(e) => startDrag("caption", e)} style={blockStyle("caption")}>
-                    <div style={{ fontFamily: sans, fontSize: layout.caption.fontSize, color: hasPhoto ? "#F2E0C8" : s.muted, maxWidth: dims.w - 260 }}>
+                {isBento && fields.caption && layout.caption.visible && (
+                  <div onPointerDown={(e) => startDrag("caption", e)} style={{ ...blockStyle("caption"), width: dims.w - 260, textAlign: layout.caption.align }}>
+                    <div style={{ fontFamily: sans, fontSize: layout.caption.fontSize, color: colorOf("caption", "#F2E0C8", s.muted) }}>
                       {fields.caption}
                     </div>
                   </div>
                 )}
 
                 {/* Bullets (vacancy / ad only) */}
-                {bullets.length > 0 && (
+                {bullets.length > 0 && layout.bullets.visible && (
                   <div onPointerDown={(e) => startDrag("bullets", e)} style={blockStyle("bullets")}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                       {bullets.map((b, i) => (
@@ -529,7 +715,7 @@ export default function MarketingGeneratorPage() {
                           <div style={{ width: layout.bullets.fontSize + 1, height: layout.bullets.fontSize + 1, borderRadius: "50%", backgroundColor: SAGE, flexShrink: 0, marginTop: 3, display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <span style={{ color: MILK, fontSize: layout.bullets.fontSize * 0.6, fontWeight: 700, lineHeight: 1 }}>✓</span>
                           </div>
-                          <div style={{ fontFamily: sans, fontSize: layout.bullets.fontSize, fontWeight: 500, color: hasPhoto ? MILK : COCOA, whiteSpace: "nowrap" }}>{b}</div>
+                          <div style={{ fontFamily: sans, fontSize: layout.bullets.fontSize, fontWeight: 500, color: colorOf("bullets", MILK, COCOA), whiteSpace: "nowrap" }}>{b}</div>
                         </div>
                       ))}
                     </div>
@@ -537,16 +723,18 @@ export default function MarketingGeneratorPage() {
                 )}
 
                 {/* Trust line */}
-                <div onPointerDown={(e) => startDrag("trustLine", e)} style={blockStyle("trustLine")}>
-                  <div style={{ fontFamily: sans, fontSize: layout.trustLine.fontSize, color: hasPhoto ? "#F2E0C8cc" : s.muted, whiteSpace: "nowrap" }}>
-                    BerryCake · торты ручной работы · Алматы
+                {layout.trustLine.visible && (
+                  <div onPointerDown={(e) => startDrag("trustLine", e)} style={{ ...blockStyle("trustLine"), width: dims.w - 128, textAlign: layout.trustLine.align }}>
+                    <div style={{ fontFamily: sans, fontSize: layout.trustLine.fontSize, color: colorOf("trustLine", "#F2E0C8", s.muted), whiteSpace: "nowrap" }}>
+                      BerryCake · торты ручной работы · Алматы
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* CTA */}
                 {showCta && (
                   <div onPointerDown={(e) => startDrag("cta", e)} style={blockStyle("cta")}>
-                    <div style={{ backgroundColor: BERRY, borderRadius: 16, padding: "20px 26px", display: "inline-block" }}>
+                    <div style={{ backgroundColor: layout.cta.color || BERRY, borderRadius: 16, padding: "20px 26px", display: "inline-block" }}>
                       <div style={{ fontFamily: sans, fontWeight: 600, fontSize: layout.cta.fontSize, color: MILK, whiteSpace: "nowrap" }}>{fields.ctaLabel}</div>
                       <div style={{ fontFamily: sans, fontWeight: 600, fontSize: layout.cta.fontSize - 2, color: MILK, marginTop: 6, whiteSpace: "nowrap" }}>{fields.contact}</div>
                     </div>
