@@ -209,12 +209,16 @@ export default function Dashboard() {
     const needed: Record<string, { base: string; required: number }> = {};
 
     upcoming.forEach((o) => {
-      // Support combo flavors: "ВУПИ ×3 + НУТЕЛЛА ×2" → [{name:"ВУПИ",qty:3},{name:"НУТЕЛЛА",qty:2}]
+      // Support combo + sizes: "ВУПИ S ×3 + НУТЕЛЛА M ×2" → [{name:"ВУПИ",qty:3},{name:"НУТЕЛЛА",qty:2}]
       const rawParts = (o.cake_flavor || "").split(" + ").map((f: string) => f.trim()).filter(Boolean);
       const qty = o.quantity || 1;
       const parsedParts = rawParts.map((f: string) => {
-        const m = f.match(/^(.*?)\s*×\s*(\d+)$/);
-        return m ? { name: m[1].trim(), qty: parseInt(m[2], 10) } : { name: f, qty: null as number | null };
+        const qtyMatch = f.match(/^(.*?)\s*×\s*(\d+)$/);
+        const withoutQty = qtyMatch ? qtyMatch[1].trim() : f;
+        const explicitQty = qtyMatch ? parseInt(qtyMatch[2], 10) : null;
+        const sizeMatch = withoutQty.match(/^(.+?)\s+(S|M|L)$/);
+        const name = sizeMatch ? sizeMatch[1].trim() : withoutQty;
+        return { name, qty: explicitQty };
       });
 
       parsedParts.forEach(({ name: flavorPart, qty: explicitQty }) => {

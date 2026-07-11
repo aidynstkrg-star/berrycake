@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { calcFlavorBalance } from "@/lib/flavorStock";
+import { calcFlavorBalance, flavorSizeKey, flavorTotalBalance, SIZES } from "@/lib/flavorStock";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -42,6 +42,7 @@ export default function ProductionPage() {
   const [user, setUser] = useState<any>(null);
   const [step, setStep] = useState(1);
   const [flavor, setFlavor] = useState("");
+  const [size, setSize] = useState("");
   const [qty, setQty] = useState("");
   const [defects, setDefects] = useState("0");
   const [notes, setNotes] = useState("");
@@ -97,7 +98,7 @@ export default function ProductionPage() {
   const fetchFlavorBalance = async () => {
     const [ordersRes, productionRes] = await Promise.all([
       supabase.from("berrycake_orders").select("cake_flavor,quantity,status").neq("status", "cancelled"),
-      supabase.from("berrycake_production").select("flavor,quantity,defects"),
+      supabase.from("berrycake_production").select("flavor,quantity,defects,size"),
     ]);
     if (ordersRes.data && productionRes.data) setFlavorBalance(calcFlavorBalance(productionRes.data, ordersRes.data));
   };
@@ -105,6 +106,7 @@ export default function ProductionPage() {
   const save = async () => {
     const qtyNum = parseInt(qty);
     const defNum = parseInt(defects) || 0;
+    if (!size) return;
     if (!qtyNum || qtyNum <= 0) return;
     if (defNum > qtyNum) {
       alert(`Брак (${defNum}) не может быть больше выпечено (${qtyNum})`);
@@ -115,6 +117,7 @@ export default function ProductionPage() {
     await supabase.from("berrycake_production").insert({
       bake_date: bakeDate,
       flavor,
+      size,
       quantity: qtyNum,
       defects: defNum,
       baker_name: auth.name || "Пекарь",
@@ -128,6 +131,7 @@ export default function ProductionPage() {
       setSaved(false);
       setStep(1);
       setFlavor("");
+      setSize("");
       setQty("");
       setDefects("0");
       setNotes("");
@@ -196,7 +200,7 @@ export default function ProductionPage() {
           <div style={{ textAlign: "center", padding: "60px 0", animation: "fadeIn 0.2s ease" }}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><IconCheck /></div>
             <h2 style={{ color: s.gold, fontSize: 24, fontWeight: 700 }}>Записано!</h2>
-            <p style={{ color: s.muted, fontSize: 14, marginTop: 8 }}>{flavor} — {qty} шт выпечено</p>
+            <p style={{ color: s.muted, fontSize: 14, marginTop: 8 }}>{flavor} {size} — {qty} шт выпечено</p>
             <p style={{ color: s.muted, fontSize: 12, marginTop: 4 }}>Форма сбросится через 3 сек...</p>
           </div>
         )}
@@ -252,7 +256,7 @@ export default function ProductionPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                     {dbFlavors.map((f) => {
                       const color = FLAVOR_COLORS[f] || s.gold;
-                      const balance = Math.round(flavorBalance[f] ?? 0);
+                      const balance = Math.round(flavorTotalBalance(flavorBalance, f));
                       return (
                         <button key={f} onClick={() => { setFlavor(f); setStep(2); }}
                           style={{ ...btnBase, flexDirection: "column", backgroundColor: s.card,
@@ -274,7 +278,7 @@ export default function ProductionPage() {
             {/* STEP 2: Quantities */}
             {step === 2 && (
               <div>
-                <button onClick={() => setStep(1)}
+                <button onClick={() => { setStep(1); setSize(""); }}
                   style={{ ...btnBase, background: "none", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 8, padding: "6px 14px", fontSize: 13, marginBottom: 24 }}>
                   ← Назад
                 </button>
@@ -285,6 +289,29 @@ export default function ProductionPage() {
                 </div>
 
                 <div style={{ backgroundColor: s.card, borderRadius: 16, padding: 24 }}>
+                  {/* Size */}
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 8, fontWeight: 600 }}>РАЗМЕР ЗАГОТОВКИ *</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {SIZES.map((sz) => {
+                        const bal = Math.round(flavorBalance[flavorSizeKey(flavor, sz)] ?? 0);
+                        const chosen = size === sz;
+                        return (
+                          <button key={sz} onClick={() => setSize(sz)}
+                            style={{ ...btnBase, flex: 1, flexDirection: "column", padding: "12px 0", borderRadius: 10,
+                              border: `2px solid ${chosen ? s.gold : s.border}`,
+                              backgroundColor: chosen ? s.gold : s.bg,
+                              color: chosen ? "#ffffff" : s.text }}>
+                            <span style={{ fontWeight: 700, fontSize: 16 }}>{sz}</span>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: chosen ? "#ffffffcc" : (bal <= 0 ? "#e57373" : s.muted) }}>
+                              ост. {bal}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Quantity */}
                   <div style={{ marginBottom: 20 }}>
                     <label style={{ color: s.muted, fontSize: 12, display: "block", marginBottom: 8, fontWeight: 600 }}>ВЫПЕЧЕНО (шт) *</label>
@@ -349,10 +376,10 @@ export default function ProductionPage() {
                     </div>
                   )}
 
-                  <button onClick={save} disabled={saving || !qty || parseInt(qty) <= 0}
+                  <button onClick={save} disabled={saving || !size || !qty || parseInt(qty) <= 0}
                     style={{ ...btnBase, width: "100%", padding: "14px", borderRadius: 10,
-                      backgroundColor: (saving || !qty || parseInt(qty) <= 0) ? s.border : s.gold,
-                      color: (saving || !qty || parseInt(qty) <= 0) ? s.muted : "#ffffff",
+                      backgroundColor: (saving || !size || !qty || parseInt(qty) <= 0) ? s.border : s.gold,
+                      color: (saving || !size || !qty || parseInt(qty) <= 0) ? s.muted : "#ffffff",
                       fontWeight: 700, fontSize: 16 }}>
                     {saving ? "Сохранение..." : "Записать"}
                   </button>
@@ -400,7 +427,7 @@ export default function ProductionPage() {
                 <div key={r.id} style={{ backgroundColor: s.card, borderRadius: 10, padding: "14px 16px", marginBottom: 8 }}>
                   {editingId === r.id ? (
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 14, flex: "0 0 auto" }}>{r.flavor}</div>
+                      <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 14, flex: "0 0 auto" }}>{r.flavor} {r.size}</div>
                       <input
                         type="number" min="1" value={editQty} onChange={(e) => setEditQty(e.target.value)}
                         inputMode="numeric"
@@ -424,7 +451,7 @@ export default function ProductionPage() {
                   ) : (
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div>
-                        <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 14 }}>{r.flavor}</div>
+                        <div style={{ color: FLAVOR_COLORS[r.flavor] || s.gold, fontWeight: 700, fontSize: 14 }}>{r.flavor} {r.size}</div>
                         {r.notes && <div style={{ color: s.muted, fontSize: 12, marginTop: 2 }}>{r.notes}</div>}
                       </div>
                       <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
